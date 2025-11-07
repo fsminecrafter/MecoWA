@@ -79,7 +79,7 @@ int main(void)
         return -1;
     }
     std::string windowTitle = "MecoWA v" + version + " | By Joel_minecrafter | XLABS INC";
-    GLFWwindow* window = glfwCreateWindow(windowWidth, windowHeight, "MecoWA v0.02 | By Joel_minecrafter | XLABS INC", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(windowWidth, windowHeight, windowTitle.c_str(), NULL, NULL);
     if (!window) {
         glfwTerminate();
         std::cerr << "Failed to create GLFW window" << std::endl;
