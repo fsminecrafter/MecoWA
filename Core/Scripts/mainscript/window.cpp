@@ -1,7 +1,6 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
-#include <string>
 #include <windows.h>
 #include <cstdio>
 #include <cmath>
@@ -12,9 +11,8 @@
 
 #include "shaderloader.h"
 #include "objloader.h"
-
-int windowWidth = 640;
-int windowHeight = 480;
+#include "engine.h"
+#include "mecowa.h"
 
 void errorpopup(int code)
 {
@@ -80,7 +78,7 @@ int main(void)
         glfwprinterror();
         return -1;
     }
-
+    std::string windowTitle = "MecoWA v" + version + " | By Joel_minecrafter | XLABS INC";
     GLFWwindow* window = glfwCreateWindow(windowWidth, windowHeight, "MecoWA v0.02 | By Joel_minecrafter | XLABS INC", NULL, NULL);
     if (!window) {
         glfwTerminate();
@@ -105,6 +103,9 @@ int main(void)
         std::cerr << "Failed to load .obj model!" << std::endl;
         return -1;
     }
+    ModelInstance monkey = CreateModelInstance(model, glm::vec3(0.0f), glm::vec3(0.0f));
+    monkey.scale = glm::vec3(1.0f); // default scale
+
 
     float* vertexCoords = new float[model.vertexCoords.size()];
     float* vertexColors = new float[model.vertexColors.size()];
@@ -209,36 +210,25 @@ for (size_t i = 0; i < vertexCount; i++) {
     while (!glfwWindowShouldClose(window)) {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // Calculate transformation matrices
-        glm::mat4 models = glm::rotate(glm::mat4(1.0f), (float)glfwGetTime(), glm::vec3(0.5f, 1.0f, 0.0f));
+        // Camera & matrices
         glm::mat4 view = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -3.0f));
-        glm::mat4 projection = glm::perspective(glm::radians(45.0f), 800.0f / 600.0f, 0.1f, 100.0f);
+        glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)windowWidth / windowHeight, 0.1f, 100.0f);
 
         shader.use();
-
-        // Light setup
-        glm::vec3 lightDir = glm::normalize(glm::vec3(-0.5f, -1.0f, -0.3f));
-        shader.setVec3("lightDir", lightDir);
-        shader.setFloat("lightStrength", 2.0f);
-        shader.setFloat("brightness", 1.0f);
-
-        // Camera (for specular)
-        glm::vec3 camPos = glm::vec3(0.0f, 0.0f, 3.0f);
-        shader.setVec3("cameraPos", camPos);
-
-        // Transform matrices
-        shader.setMat4("model", models);
         shader.setMat4("view", view);
         shader.setMat4("projection", projection);
 
+        shader.setVec3("lightDir", glm::normalize(glm::vec3(-0.5f, -1.0f, -0.3f)));
+        shader.setFloat("lightStrength", 2.0f);
+        shader.setFloat("brightness", 1.0f);
+        shader.setVec3("cameraPos", glm::vec3(0.0f, 0.0f, 3.0f));
 
-        // Draw cube
-        glBindVertexArray(VAO);
-        glDrawElements(GL_TRIANGLES, (GLsizei)indices.size(), GL_UNSIGNED_INT, 0);
+        DrawModel(monkey, shader, VAO);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
+
 
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
