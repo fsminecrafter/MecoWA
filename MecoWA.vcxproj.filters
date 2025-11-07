@@ -30,6 +30,9 @@
     <ClCompile Include="Core\Scripts\mainscript\shaderloader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Core\Scripts\mainscript\engine.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="core\resources\glfw\include\glfw\glfw3.h">
@@ -49,6 +52,9 @@
     </ClInclude>
     <ClInclude Include="shaderloader.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Scripts\mainscript\engine.h">
+      <Filter>Source Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

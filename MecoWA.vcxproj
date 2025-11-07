@@ -134,6 +134,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Core\Resources\glad\src\glad.c" />
+    <ClCompile Include="Core\Scripts\mainscript\engine.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\objloader.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\robjloader.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\shaderloader.cpp" />
@@ -142,6 +143,7 @@
   <ItemGroup>
     <ClInclude Include="core\resources\glfw\include\glfw\glfw3.h" />
     <ClInclude Include="core\resources\glfw\include\glfw\glfw3native.h" />
+    <ClInclude Include="Core\Scripts\mainscript\engine.h" />
     <ClInclude Include="Core\Scripts\mainscript\objloader.h" />
     <ClInclude Include="Core\Scripts\mainscript\robjloader.h" />
     <ClInclude Include="Core\Scripts\mainscript\shaderloader.h" />

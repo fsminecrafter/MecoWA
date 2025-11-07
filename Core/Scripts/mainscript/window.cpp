@@ -101,7 +101,7 @@ int main(void)
     glEnable(GL_DEPTH_TEST); //enable test depth buffer
 
     OBJData model;
-    if (!loadOBJ(R"(Core\Resources\monke.obj)", model)) {
+    if (!loadOBJ(R"(Core\Resources\3dmodels\monke.obj)", model)) {
         std::cerr << "Failed to load .obj model!" << std::endl;
         return -1;
     }
