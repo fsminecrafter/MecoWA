@@ -154,6 +154,7 @@
     <None Include="Core\Resources\fragment.glsl" />
     <None Include="Core\Resources\lighting.glsl" />
     <None Include="Core\Resources\vertex.glsl" />
+    <None Include="README.md" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
