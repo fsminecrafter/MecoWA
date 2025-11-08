@@ -59,8 +59,11 @@
     <ClInclude Include="Core\Scripts\mainscript\engine.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Core\Scripts\mainscript\mecowa.h">
+    <ClInclude Include="Core\Scripts\mainscript\engine_camera.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Scripts\mainscript\mecowa.h">
+      <Filter>Others</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
