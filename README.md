@@ -2,6 +2,18 @@
 
 #### MecoWA v0.03
 
-
 MecoWA is a mechanical simulator. A game or a peice of software is yet to be decided.
 ###### Definitley inspired by BeamNG.Drive [https://store.steampowered.com/app/284160/BeamNGdrive/ ]
+
+### Features
+
+- 3D Rendering (:
+- Lighting (:
+- No physics yet (:
+- No GUI yet...
+- No Cross-Platform (Windows, Linux, MacOS) yet...
+- No sound yet...
+- No game yet...
+- No functionality yet...
+- No software yet...
+- nothing
