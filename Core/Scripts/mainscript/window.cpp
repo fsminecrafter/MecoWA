@@ -117,8 +117,6 @@ int main(void)
     std::vector<float> vertexData; // pos(3) + color(3) + normal(3)
     vertexData.reserve(model.vertexCoords.size() / 3 * 9); // 9 floats per vertex
 
-    float angle = 0.0f;
-
     std::copy(model.vertexCoords.begin(), model.vertexCoords.end(), vertexCoords);
     std::copy(model.vertexColors.begin(), model.vertexColors.end(), vertexColors);
     std::copy(model.elementArray.begin(), model.elementArray.end(), elementArray);
@@ -213,6 +211,8 @@ for (size_t i = 0; i < vertexCount; i++) {
         // Camera & matrices
         glm::mat4 view = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -3.0f));
         glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)windowWidth / windowHeight, 0.1f, 100.0f);
+
+		Transform(monkey, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 0.0f));
 
         shader.use();
         shader.setMat4("view", view);

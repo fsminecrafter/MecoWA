@@ -21,6 +21,15 @@ glm::mat4 ComputeModelMatrix(const ModelInstance& instance) {
     return model;
 }
 
+glm::mat4 getModelMatrix(const ModelInstance& instance) {
+    glm::mat4 model = glm::mat4(1.0f);
+    model = glm::translate(model, instance.position);
+    model = glm::rotate(model, glm::radians(instance.rotation.x), glm::vec3(1, 0, 0));
+    model = glm::rotate(model, glm::radians(instance.rotation.y), glm::vec3(0, 1, 0));
+    model = glm::rotate(model, glm::radians(instance.rotation.z), glm::vec3(0, 0, 1));
+    return model;
+}
+
 
 void DrawModel(const ModelInstance& instance, Shader& shader, GLuint VAO) {
     glm::mat4 modelMatrix = ComputeModelMatrix(instance);
@@ -37,4 +46,17 @@ void DrawModel(const ModelInstance& instance, Shader& shader, GLuint VAO) {
         << " triangles (" << instance.model.vertexCoords.size() / 3
         << " vertices)\n";
 #endif
+}
+
+void Transform(ModelInstance& instance, const glm::vec3& rotation, const glm::vec3& position) {
+    instance.rotation = rotation;
+    instance.position = position;
+}
+
+void rotateModel(ModelInstance& instance, const glm::vec3& rotation) {
+    instance.rotation += rotation;
+}
+
+void moveModel(ModelInstance& instance, const glm::vec3& position) {
+    instance.position += position;
 }
