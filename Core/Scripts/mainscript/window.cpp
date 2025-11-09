@@ -43,6 +43,22 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
     glViewport(0, 0, width, height);
 }
 
+void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
+    Camera* cam = (Camera*)glfwGetWindowUserPointer(window);
+    if (button == GLFW_MOUSE_BUTTON_RIGHT) {
+        double mouseX, mouseY;
+        glfwGetCursorPos(window, &mouseX, &mouseY);
+
+        if (action == GLFW_PRESS) {
+            OnRightClickPressed(*cam, mouseX, mouseY, windowWidth, windowHeight);
+        }
+        else if (action == GLFW_RELEASE) {
+            OnRightClickReleased();
+        }
+    }
+}
+
+
 int main(void)
 {
     HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -75,6 +91,7 @@ int main(void)
 
     glfwMakeContextCurrent(window);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+    glfwSetMouseButtonCallback(window, MouseButtonCallback);
 
     // Initialize GLAD
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
@@ -93,6 +110,7 @@ int main(void)
     // Create camera
     static Camera camera = CreateCamera(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f), 45.0f);
     CameraController camCtrl(camera);
+    glfwSetWindowUserPointer(window, &camera);
 
     // Create models using the new engine API
     OBJData monkeOBJ;
@@ -112,10 +130,12 @@ int main(void)
         float currentFrame = (float)glfwGetTime();
         float deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
+        double mouseX, mouseY;
+        glfwGetCursorPos(window, &mouseX, &mouseY);
 
         camCtrl.Update(window, deltaTime);
         UpdatePhysics(deltaTime);
-		UpdateDrag(camera, 0.0, 0.0, windowWidth, windowHeight); // Mouse coords will be added later
+		UpdateDrag(camera, mouseX, mouseY, windowWidth, windowHeight); // Mouse coords will be added later
         // Animate the second model a bit
         sceneModels[1].rotation.y = (float)glfwGetTime() * -50.0f;
 
