@@ -136,6 +136,7 @@
     <ClCompile Include="Core\Resources\glad\src\glad.c" />
     <ClCompile Include="Core\Scripts\mainscript\engine.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\objloader.cpp" />
+    <ClCompile Include="Core\Scripts\mainscript\physics.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\robjloader.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\shaderloader.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\window.cpp" />
@@ -147,6 +148,8 @@
     <ClInclude Include="Core\Scripts\mainscript\engine_camera.h" />
     <ClInclude Include="Core\Scripts\mainscript\mecowa.h" />
     <ClInclude Include="Core\Scripts\mainscript\objloader.h" />
+    <ClInclude Include="Core\Scripts\mainscript\physics.h" />
+    <ClInclude Include="Core\Scripts\mainscript\physicsDefine.h" />
     <ClInclude Include="Core\Scripts\mainscript\robjloader.h" />
     <ClInclude Include="Core\Scripts\mainscript\shaderloader.h" />
     <ClInclude Include="shaderloader.h" />

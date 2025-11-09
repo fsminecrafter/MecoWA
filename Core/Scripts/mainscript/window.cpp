@@ -14,7 +14,12 @@
 #include "engine.h"
 #include "mecowa.h"
 #include "engine_camera.h"
+#include "physics.h"
 
+
+int windowWidth = 640;
+int windowHeight = 480;
+std::string version = "0.04";
 
 void errorpopup(int code)
 {
@@ -33,6 +38,8 @@ void glfwprinterror()
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
+    windowWidth = width;
+    windowHeight = height;
     glViewport(0, 0, width, height);
 }
 
@@ -96,6 +103,8 @@ int main(void)
     CreateObject(R"(Core\Resources\3dmodels\monke.obj)", monke2OBJ,
         glm::vec3(2.0f, 0.0f, 0.0f), glm::vec3(0.0f), glm::vec3(1.5f));
 
+	RegisterPhysicalModel(sceneModels[0], Material{ "Steel", 7850.0f, 0.6f, 0.1f, "" });
+
     float lastFrame = 0.0f;
     while (!glfwWindowShouldClose(window)) {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -105,6 +114,8 @@ int main(void)
         lastFrame = currentFrame;
 
         camCtrl.Update(window, deltaTime);
+        UpdatePhysics(deltaTime);
+		UpdateDrag(camera, 0.0, 0.0, windowWidth, windowHeight); // Mouse coords will be added later
         // Animate the second model a bit
         sceneModels[1].rotation.y = (float)glfwGetTime() * -50.0f;
 

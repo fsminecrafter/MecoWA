@@ -36,6 +36,9 @@
     <ClCompile Include="Core\Scripts\mainscript\engine.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Core\Scripts\mainscript\physics.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="core\resources\glfw\include\glfw\glfw3.h">
@@ -64,6 +67,12 @@
     </ClInclude>
     <ClInclude Include="Core\Scripts\mainscript\mecowa.h">
       <Filter>Others</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Scripts\mainscript\physicsDefine.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Scripts\mainscript\physics.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

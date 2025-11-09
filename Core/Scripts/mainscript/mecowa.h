@@ -2,10 +2,10 @@
 
 #include <string>
 
-int windowWidth = 640;
-int windowHeight = 480;
+extern int windowWidth; //640
+extern int windowHeight; //480
 
-std::string version = "0.03"; //MecoWA version
+extern std::string version;
 
 // Global engine settings
 inline float cameraSpeed = 3.0f;           // base movement speed
