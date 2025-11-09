@@ -36,30 +36,62 @@ void RegisterPhysicalModel(ModelInstance& instance, const Material& mat) {
 #endif
 }
 
-// Updates the physics simulation
 void UpdatePhysics(float deltaTime) {
+    const float airDensity = 1.2f;        // kg/m³ (typical at sea level)
+    const float dragCoefficient = 0.47f;  // approximate for a sphere, tweak per object
+    const float objectArea = 1.0f;        // cross-sectional area in m², you can scale per object
+    const float terminalVelocity = 50.0f; // m/s, maximum fall speed
+
     for (auto& obj : physicalModels) {
         if (!obj.instance || obj.physics.isStatic)
             continue;
 
+        // --- GRAVITY ---
         glm::vec3 gravity(0.0f, -9.81f * gravityG, 0.0f);
 
-        // Apply gravity
-        obj.physics.velocity += gravity * deltaTime;
+        // --- AIR RESISTANCE ---
+        glm::vec3 velocityDir = glm::normalize(obj.physics.velocity);
+        float speed = glm::length(obj.physics.velocity);
+        glm::vec3 drag(0.0f);
 
-        // Integrate motion
+        if (speed > 0.0f) {
+            // Drag force: F = 0.5 * rho * v^2 * Cd * A
+            drag = -0.5f * airDensity * speed * speed * dragCoefficient * objectArea * velocityDir;
+        }
+
+        // --- TOTAL ACCELERATION ---
+        glm::vec3 acceleration = gravity + drag / obj.physics.mass;
+
+        // Clamp vertical velocity to terminal velocity
+        if (acceleration.y < 0.0f && obj.physics.velocity.y + acceleration.y * deltaTime < -terminalVelocity) {
+            acceleration.y = (-terminalVelocity - obj.physics.velocity.y) / deltaTime;
+        }
+
+        // --- EXTERNAL FORCES / INERTIA ---
+        if (glm::length(obj.physics.forces) > 0.0f) {
+            acceleration += obj.physics.forces / obj.physics.mass;
+            obj.physics.forces = glm::vec3(0.0f);
+        }
+
+        // --- ROTATION / ANGULAR INERTIA ---
+        glm::vec3 angularAccel = obj.physics.angularVelocity / obj.physics.mass; // simplified
+        obj.physics.angularVelocity += angularAccel * deltaTime;
+
+        // --- INTEGRATE MOTION ---
+        obj.physics.velocity += acceleration * deltaTime;
         obj.instance->position += obj.physics.velocity * deltaTime;
         obj.instance->rotation += obj.physics.angularVelocity * deltaTime;
 
-        // Basic floor collision
+        // --- COLLISION WITH FLOOR ---
         if (obj.instance->position.y < 0.0f) {
             obj.instance->position.y = 0.0f;
-            obj.physics.velocity.y *= -0.3f; // damp bounce
 
-#ifdef Debug
-            std::cout << "[Physics] Collision detected: object hit ground at "
-                << obj.instance->position.y << std::endl;
-#endif
+            // Bounce effect with damping
+            obj.physics.velocity.y *= -0.3f;
+
+            // Horizontal friction
+            obj.physics.velocity.x *= 0.98f;
+            obj.physics.velocity.z *= 0.98f;
         }
 
 #ifdef Debug
@@ -70,7 +102,14 @@ void UpdatePhysics(float deltaTime) {
             << obj.instance->position.z << ") | "
             << "Vel(" << obj.physics.velocity.x << ", "
             << obj.physics.velocity.y << ", "
-            << obj.physics.velocity.z << ")" << std::endl;
+            << obj.physics.velocity.z << ") | "
+            << "Rot(" << obj.instance->rotation.x << ", "
+            << obj.instance->rotation.y << ", "
+            << obj.instance->rotation.z << ") | "
+            << "AngularVel(" << obj.physics.angularVelocity.x << ", "
+            << obj.physics.angularVelocity.y << ", "
+            << obj.physics.angularVelocity.z << ") | "
+            << "Mass(" << obj.physics.mass << ")" << std::endl;
 #endif
     }
 }
@@ -100,6 +139,7 @@ static bool dragging = false;
 static PhysicalModel* draggedModel = nullptr;
 static glm::vec3 grabLocalOffset;
 static glm::vec3 grabWorldPoint;
+static bool prevIsStatic = false;  // remember original static state
 
 // Helper: perform a ray-triangle intersection
 bool RayIntersectsTriangle(const glm::vec3& rayOrigin,
@@ -149,16 +189,15 @@ PhysicalModel* RaycastModels(const glm::vec3& rayOrigin,
     return result;
 }
 
-void OnRightClickPressed(const Camera& cam, double mouseX, double mouseY, int windowWidthz, int windowHeighty) {
+void OnRightClickPressed(const Camera& cam, double mouseX, double mouseY, int windowWidth, int windowHeight) {
     if (dragging) return;
 
-    // Compute ray from camera
     glm::vec2 ndc = {
-        (2.0f * mouseX) / windowWidthz - 1.0f,
-        1.0f - (2.0f * mouseY) / windowHeighty
+        (2.0f * mouseX) / windowWidth - 1.0f,
+        1.0f - (2.0f * mouseY) / windowHeight
     };
 
-    glm::mat4 projection = glm::perspective(glm::radians(cam.fov), (float)windowWidthz / windowHeighty, 0.1f, 1000.0f);
+    glm::mat4 projection = glm::perspective(glm::radians(cam.fov), (float)windowWidth / windowHeight, 0.1f, 1000.0f);
     glm::mat4 view = GetViewMatrix(cam);
     glm::mat4 invVP = glm::inverse(projection * view);
 
@@ -180,6 +219,10 @@ void OnRightClickPressed(const Camera& cam, double mouseX, double mouseY, int wi
         grabLocalOffset = hit - hitModel->instance->position;
         dragging = true;
 
+        // Remember previous static state and make object static
+        prevIsStatic = hitModel->physics.isStatic;
+        hitModel->physics.isStatic = true;
+
 #ifdef Debug
         std::cout << "[Physics] Grabbed object at "
             << "Pos(" << hitModel->instance->position.x << ", "
@@ -191,20 +234,25 @@ void OnRightClickPressed(const Camera& cam, double mouseX, double mouseY, int wi
 }
 
 void OnRightClickReleased() {
+    if (!dragging || !draggedModel) return;
+
+    // Restore original static state
+    draggedModel->physics.isStatic = prevIsStatic;
+
     dragging = false;
     draggedModel = nullptr;
 }
 
-// Update dragging constraint
-void UpdateDrag(const Camera& cam, double mouseX, double mouseY, int windowWidthz, int windowHeighty) {
+// Update dragging constraint with inertia based on mass
+void UpdateDrag(const Camera& cam, double mouseX, double mouseY, int windowWidth, int windowHeight) {
     if (!dragging || !draggedModel) return;
 
     glm::vec2 ndc = {
-        (2.0f * mouseX) / windowWidthz - 1.0f,
-        1.0f - (2.0f * mouseY) / windowHeighty
+        (2.0f * mouseX) / windowWidth - 1.0f,
+        1.0f - (2.0f * mouseY) / windowHeight
     };
 
-    glm::mat4 projection = glm::perspective(glm::radians(cam.fov), (float)windowWidthz / windowHeighty, 0.1f, 1000.0f);
+    glm::mat4 projection = glm::perspective(glm::radians(cam.fov), (float)windowWidth / windowHeight, 0.1f, 1000.0f);
     glm::mat4 view = GetViewMatrix(cam);
     glm::mat4 invVP = glm::inverse(projection * view);
 
@@ -217,10 +265,10 @@ void UpdateDrag(const Camera& cam, double mouseX, double mouseY, int windowWidth
     glm::vec3 rayDir = glm::normalize(glm::vec3(rayEndWorld - rayStartWorld));
     glm::vec3 rayOrigin = glm::vec3(rayStartWorld);
 
-    // Move the object so the grab point follows the ray direction
     float grabDist = glm::length(grabWorldPoint - cam.position);
     glm::vec3 newGrabPos = rayOrigin + rayDir * grabDist;
     glm::vec3 newObjectPos = newGrabPos - grabLocalOffset;
 
-    draggedModel->instance->position = glm::mix(draggedModel->instance->position, newObjectPos, 0.2f);
+    float massFactor = 1000 / std::sqrt(draggedModel->physics.mass); // tweak factor as needed
+    draggedModel->instance->position = glm::mix(draggedModel->instance->position, newObjectPos, 0.2f * massFactor);
 }

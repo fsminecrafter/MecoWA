@@ -19,7 +19,7 @@
 
 int windowWidth = 640;
 int windowHeight = 480;
-std::string version = "0.04";
+std::string version = "0.05";
 
 void errorpopup(int code)
 {
