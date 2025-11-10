@@ -93,7 +93,7 @@
     <ClCompile>
       <PreprocessorDefinitions>_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <WarningLevel>Level3</WarningLevel>
-      <AdditionalIncludeDirectories>D:\Projects\MecoWA\Core\Resources\glad\include;D:\Projects\MecoWA\Core\Resources\glfw\include;D:\Projects\MecoWA\Core\Resources\glm;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>D:\Projects\MecoWA\Core\SaveData;D:\Projects\MecoWA\Core\Data;D:\Projects\MecoWA\Core\Settings;D:\Projects\MecoWA\Core\Sounds;D:\Projects\MecoWA\Core\Temp;D:\Projects\MecoWA\Core\Resources\glad\include;D:\Projects\MecoWA\Core\Resources\glfw\include;D:\Projects\MecoWA\Core\Resources\glm;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalModuleDependencies>%(AdditionalModuleDependencies)</AdditionalModuleDependencies>
       <MultiProcessorCompilation>false</MultiProcessorCompilation>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
