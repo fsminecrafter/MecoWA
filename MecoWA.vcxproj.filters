@@ -16,9 +16,6 @@
     <Filter Include="Others">
       <UniqueIdentifier>{d4fb57b1-f485-4355-9ac5-854ff1885b16}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Included dirs">
-      <UniqueIdentifier>{e628a0b8-2892-4450-8f32-db82c0ac3e8a}</UniqueIdentifier>
-    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="core\scripts\mainscript\window.cpp">
