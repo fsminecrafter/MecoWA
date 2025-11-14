@@ -8,16 +8,34 @@ on:
 
 jobs:
   build:
-
-    runs-on: ubuntu-latest
+    name: compile
+    runs-on: windows-latest
 
     steps:
     - uses: actions/checkout@v4
-    - name: configure
-      run: ./configure
-    - name: make
-      run: make
-    - name: make check
-      run: make check
-    - name: make distcheck
-      run: make distcheck
+
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
+
+    # Optional: Setup Visual Studio Developer Command Prompt environment
+    - name: Add MSBuild to PATH
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Build Visual Studio project
+      working-directory: Core/Scripts/mainscript
+      run: |
+        msbuild *.sln /p:Configuration=Release /p:Platform=x64
+
+    - name: Create Executables directory
+      run: mkdir Executables
+
+    - name: Move built executable
+      run: |
+        $exe = Get-ChildItem -Recurse -Filter *.exe | Where-Object { $_.FullName -like "*Release*" }
+        Copy-Item $exe.FullName Executables/
+
+    - name: Upload executable artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: built-executable
+        path: Executables/
