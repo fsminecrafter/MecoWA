@@ -24,7 +24,9 @@ jobs:
     - name: Build Visual Studio project
       working-directory: Core/Scripts/mainscript
       run: |
-        msbuild *.sln /p:Configuration=Debug /p:Platform=x64
+        $sln = Get-ChildItem -Filter *.sln | Select-Object -First 1
+        if (-not $sln) { throw "No .sln file found in Core/Scripts/mainscript" }
+        msbuild $sln.FullName /p:Configuration=Debug /p:Platform=x64
 
     - name: Create Executables directory
       run: mkdir Executables
