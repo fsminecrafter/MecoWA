@@ -49,14 +49,14 @@
       <PreprocessorDefinitions>_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <WarningLevel>Level3</WarningLevel>
       <AdditionalIncludeDirectories>
-        ..\..\Core\SaveData;
-        ..\..\Core\Data;
-        ..\..\Core\Settings;
-        ..\..\Core\Sounds;
-        ..\..\Core\Temp;
-        ..\..\Core\Resources\glad\include;
-        ..\..\Core\Resources\glfw\include;
-        ..\..\Core\Resources\glm;
+        Core\SaveData;
+        Core\Data;
+        Core\Settings;
+        Core\Sounds;
+        Core\Temp;
+        Core\Resources\glad\include;
+        Core\Resources\glfw\include;
+        Core\Resources\glm;
         %(AdditionalIncludeDirectories)
       </AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
@@ -66,8 +66,8 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
       <AdditionalLibraryDirectories>
-        ..\..\Core\Resources\glm;
-        ..\..\Core\Resources\glfw\lib-vc2022;
+        Core\Resources\glm;
+        Core\Resources\glfw\lib-vc2022;
         %(AdditionalLibraryDirectories)
       </AdditionalLibraryDirectories>
       <AdditionalDependencies>
@@ -83,7 +83,7 @@
   </ItemDefinitionGroup>
 
   <ItemGroup>
-    <ClCompile Include="..\..\Core\Resources\glad\src\glad.c" />
+    <ClCompile Include="Core\Resources\glad\src\glad.c" />
     <ClCompile Include="engine.cpp" />
     <ClCompile Include="objloader.cpp" />
     <ClCompile Include="physics.cpp" />
@@ -93,8 +93,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ClInclude Include="..\..\Core\Resources\glfw\include\glfw\glfw3.h" />
-    <ClInclude Include="..\..\Core\Resources\glfw\include\glfw\glfw3native.h" />
+    <ClInclude Include="Core\Resources\glfw\include\glfw\glfw3.h" />
+    <ClInclude Include="Core\Resources\glfw\include\glfw\glfw3native.h" />
     <ClInclude Include="engine.h" />
     <ClInclude Include="engine_camera.h" />
     <ClInclude Include="material_registry.h" />
@@ -109,9 +109,9 @@
   <ItemGroup>
     <None Include=".gitattributes" />
     <None Include=".gitignore" />
-    <None Include="..\..\Core\Resources\fragment.glsl" />
-    <None Include="..\..\Core\Resources\lighting.glsl" />
-    <None Include="..\..\Core\Resources\vertex.glsl" />
+    <None Include="Core\Resources\fragment.glsl" />
+    <None Include="Core\Resources\lighting.glsl" />
+    <None Include="Core\Resources\vertex.glsl" />
     <None Include="README.md" />
   </ItemGroup>
 
