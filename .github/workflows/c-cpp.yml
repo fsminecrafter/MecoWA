@@ -22,10 +22,10 @@ jobs:
       uses: microsoft/setup-msbuild@v2
 
     - name: Build Visual Studio project
-      working-directory: Core/Scripts/mainscript
+      working-directory: /
       run: |
         $sln = Get-ChildItem -Filter *.sln | Select-Object -First 1
-        if (-not $sln) { throw "No .sln file found in Core/Scripts/mainscript" }
+        if (-not $sln) { throw "No .sln file found in /" }
         msbuild $sln.FullName /p:Configuration=Debug /p:Platform=x64
 
     - name: Create Executables directory
