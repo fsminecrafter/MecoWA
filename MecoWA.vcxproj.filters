@@ -91,5 +91,11 @@
     <None Include="Core\Resources\vertex.glsl">
       <Filter>Resource Files</Filter>
     </None>
+    <None Include=".gitattributes">
+      <Filter>Others</Filter>
+    </None>
+    <None Include=".gitignore">
+      <Filter>Others</Filter>
+    </None>
   </ItemGroup>
 </Project>

@@ -156,6 +156,8 @@
     <ClInclude Include="shaderloader.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include=".gitattributes" />
+    <None Include=".gitignore" />
     <None Include="Core\Resources\fragment.glsl" />
     <None Include="Core\Resources\lighting.glsl" />
     <None Include="Core\Resources\vertex.glsl" />
