@@ -146,6 +146,7 @@
     <ClInclude Include="core\resources\glfw\include\glfw\glfw3native.h" />
     <ClInclude Include="Core\Scripts\mainscript\engine.h" />
     <ClInclude Include="Core\Scripts\mainscript\engine_camera.h" />
+    <ClInclude Include="Core\Scripts\mainscript\material_registry.h" />
     <ClInclude Include="Core\Scripts\mainscript\mecowa.h" />
     <ClInclude Include="Core\Scripts\mainscript\objloader.h" />
     <ClInclude Include="Core\Scripts\mainscript\physics.h" />

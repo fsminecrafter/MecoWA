@@ -12,6 +12,7 @@ struct Material {
     float density = 1.0f;             // kg/m³ or arbitrary density unit
     float friction = 0.5f;            // for later physics
     float restitution = 0.1f;         // bounciness
+	float dragCoefficient = 0.6f;     // affects air resistance
     std::string texturePath = "";     // future texture path
 };
 
@@ -34,9 +35,14 @@ struct PhysicalEntity {
     glm::vec3 velocity = glm::vec3(0.0f);
     glm::vec3 angularVelocity = glm::vec3(0.0f);
     glm::vec3 forces = glm::vec3(0.0f);
+    glm::vec3 centerOfGravity = glm::vec3(0, 0, 0);    // starting offset for CG
+	float volumeCM3 = 0.0f;          // volume in cubic centimeters
 
     float mass = 1.0f;
     bool isStatic = false;
+
+	glm::vec3 torque = glm::vec3(0.0f);
+	glm::vec3 force = glm::vec3(0.0f);
 
     Material material;
     std::vector<AnchorPoint> anchors;

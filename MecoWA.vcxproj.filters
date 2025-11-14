@@ -74,6 +74,9 @@
     <ClInclude Include="Core\Scripts\mainscript\physics.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Core\Scripts\mainscript\material_registry.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="Core\Resources\lighting.glsl">
