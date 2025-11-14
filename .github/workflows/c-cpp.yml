@@ -17,15 +17,10 @@ jobs:
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
 
-    # Optional: Setup Visual Studio Developer Command Prompt environment
-    - name: Add MSBuild to PATH
-      uses: microsoft/setup-msbuild@v2
-
-    - name: Build Visual Studio project
-      working-directory: /
+    - name: Build solution
       run: |
-        $sln = Get-ChildItem -Filter *.sln | Select-Object -First 1
-        if (-not $sln) { throw "No .sln file found in /" }
+        $sln = Get-ChildItem -Path . -Filter *.sln | Select-Object -First 1
+        if (-not $sln) { throw "No .sln found at repo root" }
         msbuild $sln.FullName /p:Configuration=Debug /p:Platform=x64
 
     - name: Create Executables directory
@@ -33,7 +28,8 @@ jobs:
 
     - name: Move built executable
       run: |
-        $exe = Get-ChildItem -Recurse -Filter *.exe | Where-Object { $_.FullName -like "*Release*" }
+        $exe = Get-ChildItem -Recurse -Filter *.exe | Where-Object { $_.FullName -like "*Debug*" }
+        if (-not $exe) { throw "No executable produced" }
         Copy-Item $exe.FullName Executables/
 
     - name: Upload executable artifact
