@@ -49,11 +49,6 @@
       <PreprocessorDefinitions>_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <WarningLevel>Level3</WarningLevel>
       <AdditionalIncludeDirectories>
-        Core\SaveData;
-        Core\Data;
-        Core\Settings;
-        Core\Sounds;
-        Core\Temp;
         Core\Resources\glad\include;
         Core\Resources\glfw\include;
         Core\Resources\glm;
@@ -84,26 +79,26 @@
 
   <ItemGroup>
     <ClCompile Include="Core\Resources\glad\src\glad.c" />
-    <ClCompile Include="engine.cpp" />
-    <ClCompile Include="objloader.cpp" />
-    <ClCompile Include="physics.cpp" />
-    <ClCompile Include="robjloader.cpp" />
-    <ClCompile Include="shaderloader.cpp" />
-    <ClCompile Include="window.cpp" />
+    <ClCompile Include="Core\Scripts\mainscript\engine.cpp" />
+    <ClCompile Include="Core\Scripts\mainscript\objloader.cpp" />
+    <ClCompile Include="Core\Scripts\mainscript\physics.cpp" />
+    <ClCompile Include="Core\Scripts\mainscript\robjloader.cpp" />
+    <ClCompile Include="Core\Scripts\mainscript\shaderloader.cpp" />
+    <ClCompile Include="Core\Scripts\mainscript\window.cpp" />
   </ItemGroup>
 
   <ItemGroup>
     <ClInclude Include="Core\Resources\glfw\include\glfw\glfw3.h" />
     <ClInclude Include="Core\Resources\glfw\include\glfw\glfw3native.h" />
-    <ClInclude Include="engine.h" />
-    <ClInclude Include="engine_camera.h" />
-    <ClInclude Include="material_registry.h" />
-    <ClInclude Include="mecowa.h" />
-    <ClInclude Include="objloader.h" />
-    <ClInclude Include="physics.h" />
-    <ClInclude Include="physicsDefine.h" />
-    <ClInclude Include="robjloader.h" />
-    <ClInclude Include="shaderloader.h" />
+    <ClInclude Include="Core\Scripts\mainscript\engine.h" />
+    <ClInclude Include="Core\Scripts\mainscript\engine_camera.h" />
+    <ClInclude Include="Core\Scripts\mainscript\material_registry.h" />
+    <ClInclude Include="Core\Scripts\mainscript\mecowa.h" />
+    <ClInclude Include="Core\Scripts\mainscript\objloader.h" />
+    <ClInclude Include="Core\Scripts\mainscript\physics.h" />
+    <ClInclude Include="Core\Scripts\mainscript\physicsDefine.h" />
+    <ClInclude Include="Core\Scripts\mainscript\robjloader.h" />
+    <ClInclude Include="Core\Scripts\mainscript\shaderloader.h" />
   </ItemGroup>
 
   <ItemGroup>
