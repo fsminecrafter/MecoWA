@@ -24,7 +24,7 @@ jobs:
     - name: Build Visual Studio project
       working-directory: Core/Scripts/mainscript
       run: |
-        msbuild *.sln /p:Configuration=Release /p:Platform=x64
+        msbuild *.sln /p:Configuration=Debug /p:Platform=x64
 
     - name: Create Executables directory
       run: mkdir Executables
