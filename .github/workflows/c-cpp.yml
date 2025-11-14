@@ -13,6 +13,16 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    - name: Inspect resource folders
+      run: |
+        echo "=== LISTING /Core/Resources ==="
+        Get-ChildItem -Recurse Core/Resources | Select-Object FullName
+    - name: Show project paths
+      run: |
+        echo "=== VCXPROJ CONTENTS ==="
+        Get-ChildItem Core/Scripts/mainscript -Filter *.vcxproj | % { Get-Content $_ }
+
+
 
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
