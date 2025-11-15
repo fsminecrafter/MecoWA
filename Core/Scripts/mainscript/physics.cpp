@@ -126,6 +126,67 @@ static std::pair<double, glm::dvec3> ComputeVolumeAndCentroid(const ModelInstanc
     return { volume_m3, centroid };
 }
 
+// Compute inertia tensor of a closed mesh using tetra decomposition.
+// Assumes mesh centered at origin. CG offset will be removed later.
+static glm::dmat3 ComputeInertiaTensor(const ModelInstance& instance, const glm::dvec3& cg, double density)
+{
+    const auto& verts_f = instance.model.vertexCoords;
+    const auto& idx = instance.model.elementArray;
+
+    // Convert vertices to double
+    const size_t vcount = verts_f.size() / 3;
+    std::vector<glm::dvec3> verts(vcount);
+    for (size_t i = 0; i < vcount; ++i) {
+        verts[i] = glm::dvec3(
+            verts_f[i * 3 + 0],
+            verts_f[i * 3 + 1],
+            verts_f[i * 3 + 2]
+        );
+    }
+
+    glm::dmat3 inertia(0.0);
+    double totalMass = 0.0;
+
+    for (size_t i = 0; i + 2 < idx.size(); i += 3) {
+        glm::dvec3 v0 = verts[idx[i + 0]] - cg;
+        glm::dvec3 v1 = verts[idx[i + 1]] - cg;
+        glm::dvec3 v2 = verts[idx[i + 2]] - cg;
+
+        // Tetra: (0, v0, v1, v2)
+        double vol = glm::dot(v0, glm::cross(v1, v2)) / 6.0;
+        double mass = density * std::abs(vol);
+        totalMass += mass;
+
+        // For inertia tensor of a tetrahedron: use analytic formula
+        glm::dmat3 C(0.0);
+
+        // Build matrix of vertex coords
+        glm::dvec3 a = v0, b = v1, c = v2;
+
+        double a2 = glm::dot(a, a);
+        double b2 = glm::dot(b, b);
+        double c2 = glm::dot(c, c);
+
+        C[0][0] = a.y * a.y + a.z * a.z +
+            b.y * b.y + b.z * b.z +
+            c.y * c.y + c.z * c.z;
+        C[1][1] = a.x * a.x + a.z * a.z +
+            b.x * b.x + b.z * b.z +
+            c.x * c.x + c.z * c.z;
+        C[2][2] = a.x * a.x + a.y * a.y +
+            b.x * b.x + b.y * b.y +
+            c.x * c.x + c.y * c.y;
+
+        C[0][1] = C[1][0] = a.x * a.y + b.x * b.y + c.x * c.y;
+        C[0][2] = C[2][0] = a.x * a.z + b.x * b.z + c.x * c.z;
+        C[1][2] = C[2][1] = a.y * a.z + b.y * b.z + c.y * c.z;
+
+        inertia += (mass / 10.0) * C;
+    }
+
+    return inertia;
+}
+
 
 // Registers a model with physics simulation
 void RegisterPhysicalModel(ModelInstance& instance, const Material& mat) {
@@ -133,6 +194,7 @@ void RegisterPhysicalModel(ModelInstance& instance, const Material& mat) {
     double volumeAbs = std::abs(volume_m3);
     double vol_cm3 = volumeAbs * 1e6; // m^3 -> cm^3
     glm::vec3 centroid = glm::vec3(centroid_d);
+    glm::dmat3 I_local = ComputeInertiaTensor(instance, centroid_d, mat.density);
 
     float vertexCount = static_cast<float>(instance.model.vertexCoords.size()) / 3.0f;
     float mass = (float)std::abs(volume_m3) * mat.density;
@@ -145,6 +207,9 @@ void RegisterPhysicalModel(ModelInstance& instance, const Material& mat) {
     phys.angularVelocity = glm::vec3(0.0f);
     phys.centerOfGravity = centroid;
     phys.volumeCM3 = vol_cm3;
+    phys.inertiaTensorLocal = glm::mat3(I_local);           // local space
+    phys.inertiaTensorLocalInv = glm::inverse(phys.inertiaTensorLocal);
+    phys.angularMomentum = glm::vec3(0.0f);
 
     physicalModels.push_back({ &instance, phys });
 
@@ -207,47 +272,39 @@ void UpdatePhysics(float deltaTime) {
             obj.physics.forces = glm::vec3(0.0f);
         }
 
-        // --- ROTATION / MOMENT OF INERTIA ---
-        // For irregular shape: I ~ k * m * r2  (k~0.4 works well)
-        float radius = pow((3.0f * volumeM3) / (4.0f * 3.14159f), 1.0f / 3.0f);
-        float MOI = 0.4f * mass * radius * radius;
+		// ----------- REAL RIGID BODY ROTATION ---------------
 
-        glm::vec3 angularAccel = obj.physics.torque / MOI;
-        obj.physics.angularVelocity += angularAccel * deltaTime;
+        // 1) Build world-space inertia tensor
+        glm::quat q = glm::quat(obj.instance->rotation);
+        glm::mat3 R = glm::mat3_cast(q);
+
+        obj.physics.inertiaTensorWorld =
+            R * obj.physics.inertiaTensorLocal * glm::transpose(R);
+
+        obj.physics.inertiaTensorWorldInv =
+            R * obj.physics.inertiaTensorLocalInv * glm::transpose(R);
+
+        // 2) Convert torque -> angular momentum
+        obj.physics.angularMomentum += obj.physics.torque * deltaTime;
         obj.physics.torque = glm::vec3(0.0f);
 
-        // --- APPLY ROTATION AROUND CENTER OF GRAVITY ---
+        // 3) Angular velocity from angular momentum
+        glm::vec3 w = obj.physics.inertiaTensorWorldInv * obj.physics.angularMomentum;
+        obj.physics.angularVelocity = w;
 
-        // Step 1: Build rotation quaternion from angular velocity
-        glm::quat dq = glm::quat(
-            0.0f,
-            obj.physics.angularVelocity.x * deltaTime,
-            obj.physics.angularVelocity.y * deltaTime,
-            obj.physics.angularVelocity.z * deltaTime
-        );
+        // 4) Semi-implicit quaternion integration
+        glm::quat dq(0, w.x, w.y, w.z);
+        glm::quat qNew = q + 0.5f * dq * q * (float)deltaTime;
+        qNew = glm::normalize(qNew);
 
-        // Current orientation (convert euler to quat)
-        glm::quat currentRot = glm::quat(obj.instance->rotation);
+        // save rotation back
+        obj.instance->rotation = glm::eulerAngles(qNew);
 
-        // New orientation
-        glm::quat newRot = currentRot + 0.5f * dq * currentRot;
-        newRot = glm::normalize(newRot);
-
-        // Step 2: Save rotation back as Euler
-        obj.instance->rotation = glm::eulerAngles(newRot);
-
-        // Step 3: Apply rotation around CG
+        // 5) Apply rotation around CG correctly
         glm::vec3 cgWorld = obj.instance->position + obj.physics.centerOfGravity;
-
-        // Translate object so CG is pivot
         glm::vec3 localOffset = obj.instance->position - cgWorld;
-
-        // Rotate object using quaternion
-        localOffset = localOffset * newRot;
-
-        // Move object back
+        localOffset = R * localOffset;
         obj.instance->position = cgWorld + localOffset;
-
 
         // --- INTEGRATE ---
         obj.physics.velocity += acceleration * deltaTime;
