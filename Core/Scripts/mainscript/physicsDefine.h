@@ -36,11 +36,11 @@ struct PhysicalEntity {
     glm::vec3 angularVelocity = glm::vec3(0.0f);
     glm::vec3 forces = glm::vec3(0.0f);
     glm::vec3 centerOfGravity = glm::vec3(0, 0, 0);    // starting offset for CG
-    glm::mat3 inertiaTensorLocal;
-    glm::mat3 inertiaTensorLocalInv;
-    glm::mat3 inertiaTensorWorld;
-    glm::mat3 inertiaTensorWorldInv;
-    glm::vec3 angularMomentum;
+	glm::mat3 inertiaTensorLocal = glm::mat3(0.0f);
+    glm::mat3 inertiaTensorLocalInv = glm::mat3(0.0f);
+    glm::mat3 inertiaTensorWorld = glm::mat3(0.0f);
+    glm::mat3 inertiaTensorWorldInv = glm::mat3(0.0f);
+    glm::vec3 angularMomentum = glm::vec3(0,0,0);
 	float volumeCM3 = 0.0f;          // volume in cubic centimeters
 
     float mass = 1.0f;
