@@ -9,8 +9,7 @@
 #include <unordered_map>
 #include <cassert>
 
-bool loadOBJ(const std::string& path, OBJData& out)
-{
+bool loadOBJ(const std::string& path, OBJData& out) {
     std::ifstream file(path);
     if (!file.is_open()) {
         std::cerr << "[OBJLoader] Failed to open file: " << path << std::endl;
@@ -105,16 +104,25 @@ bool loadOBJ(const std::string& path, OBJData& out)
     // Compute normals if missing
     std::vector<glm::vec3> vertexNormals(temp_vertices.size(), glm::vec3(0.0f));
     if (temp_normals.empty()) {
-        for (size_t i = 0; i + 2 < vertexIndices.size(); i += 3) {
-            unsigned int i0 = vertexIndices[i];
-            unsigned int i1 = vertexIndices[i + 1];
-            unsigned int i2 = vertexIndices[i + 2];
+        for (size_t i = 0; i < vertexIndices.size(); i += 3) {
+            int i0 = vertexIndices[i];
+            int i1 = vertexIndices[i + 1];
+            int i2 = vertexIndices[i + 2];
 
-            // Skip invalid indices
-            if (i0 >= temp_vertices.size() || i1 >= temp_vertices.size() || i2 >= temp_vertices.size())
+            if (i0 < 0 || i1 < 0 || i2 < 0 ||
+                i0 >= temp_vertices.size() ||
+                i1 >= temp_vertices.size() ||
+                i2 >= temp_vertices.size()) {
+                std::cerr << "[OBJLoader] Warning: face with invalid vertex index, skipping\n";
                 continue;
+            }
 
-            glm::vec3 faceNormal = glm::normalize(glm::cross(temp_vertices[i1] - temp_vertices[i0], temp_vertices[i2] - temp_vertices[i0]));
+            glm::vec3 v0 = temp_vertices[i0];
+            glm::vec3 v1 = temp_vertices[i1];
+            glm::vec3 v2 = temp_vertices[i2];
+
+            glm::vec3 faceNormal = glm::normalize(glm::cross(v1 - v0, v2 - v0));
+
             vertexNormals[i0] += faceNormal;
             vertexNormals[i1] += faceNormal;
             vertexNormals[i2] += faceNormal;
