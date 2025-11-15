@@ -313,27 +313,21 @@ float ComputeKineticEnergy(const PhysicalModel& pm) {
 
 // -------------------- main physics loop --------------------
 
-void RegisterPhysicalModel(ModelInstance& instance, const Material& mat, bool isstatic) {
-    // compute volume & centroid (reuse your existing method or call ComputeVolumeAndCentroid if available)
-    // For brevity assume you have phys.volumeCM3 and centerOfGravity already computed previously
-    // Here we approximate mass from volume * density (volume in m^3)
-    glm::vec3 cg = instance.position + glm::vec3(0.0f); // if you already compute centroid, use that
-    float volume_m3 = (instance.model.vertexCoords.size() > 0) ? 1e-6f : 0.0f; // fallback hack: user should compute
-    float mass = std::max(0.001f, volume_m3 * mat.density); // guard
-
+void RegisterPhysicalModel(ModelInstance& instance, const Material& mat, bool isStatic) {
+    // Store pointer to instance (avoid dangling reference)
     PhysicalEntity phys;
-    phys.instance = instance;
-    phys.mass = mass;
+    phys.instance = &instance; // <- must point to the actual object
+    phys.mass = std::max(0.001f, 1e-6f * mat.density); // crude fallback
     phys.material = mat;
     phys.velocity = glm::vec3(0.0f);
     phys.angularVelocity = glm::vec3(0.0f);
     phys.centerOfGravity = glm::vec3(0.0f);
     phys.volumeCM3 = 0.0f;
-	phys.isStatic = isstatic;
+    phys.isStatic = isStatic;
 
-    // inertia initialization: user should compute accurate inertia; we set diagonal approximate
+    // approximate inertia
     float r = 0.5f;
-    float I = 0.4f * mass * r * r;
+    float I = 0.4f * phys.mass * r * r;
     phys.inertiaTensorLocal = glm::mat3(I);
     phys.inertiaTensorLocalInv = glm::inverse(phys.inertiaTensorLocal);
     phys.angularMomentum = glm::vec3(0.0f);
@@ -341,7 +335,9 @@ void RegisterPhysicalModel(ModelInstance& instance, const Material& mat, bool is
     physicalModels.push_back({ &instance, phys });
 
 #ifdef Debug
-    std::cout << "[Physics] Registered model mass=" << phys.mass << "\n";
+    std::cout << "[Physics] Registered model mass=" << phys.mass 
+              << " vertices=" << instance.model.vertexCoords.size()
+              << " indices=" << instance.model.elementArray.size() << "\n";
 #endif
 }
 
@@ -471,13 +467,14 @@ PhysicalModel* RaycastModels(const glm::vec3& rayOrigin,
         glm::mat4 modelMat = ComputeModelMatrix(obj.physics.instance);
 
         for (size_t i = 0; i < indices.size(); i += 3) {
-            glm::vec3 v0(verts[indices[i] * 3 + 0], verts[indices[i] * 3 + 1], verts[indices[i] * 3 + 2]);
-            glm::vec3 v1(verts[indices[i + 1] * 3 + 0], verts[indices[i + 1] * 3 + 1], verts[indices[i + 1] * 3 + 2]);
-            glm::vec3 v2(verts[indices[i + 2] * 3 + 0], verts[indices[i + 2] * 3 + 1], verts[indices[i + 2] * 3 + 2]);
-
-            v0 = glm::vec3(modelMat * glm::vec4(v0, 1.0f));
-            v1 = glm::vec3(modelMat * glm::vec4(v1, 1.0f));
-            v2 = glm::vec3(modelMat * glm::vec4(v2, 1.0f));
+			size_t i0 = indices[i]*3;
+			size_t i1 = indices[i+1]*3;
+			size_t i2 = indices[i+2]*3;
+			if (i0+2 >= verts.size() || i1+2 >= verts.size() || i2+2 >= verts.size()) continue;
+			
+			glm::vec3 v0 = glm::vec3(modelMat * glm::vec4(verts[i0+0], verts[i0+1], verts[i0+2], 1.0f));
+			glm::vec3 v1 = glm::vec3(modelMat * glm::vec4(verts[i1+0], verts[i1+1], verts[i1+2], 1.0f));
+			glm::vec3 v2 = glm::vec3(modelMat * glm::vec4(verts[i2+0], verts[i2+1], verts[i2+2], 1.0f));
 
             float dist;
             if (RayIntersectsTriangle(rayOrigin, rayDir, v0, v1, v2, dist)) {
