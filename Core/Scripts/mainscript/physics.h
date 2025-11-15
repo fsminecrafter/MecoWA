@@ -10,7 +10,7 @@ struct PhysicalModel {
 
 extern std::vector<PhysicalModel> physicalModels;
 
-void RegisterPhysicalModel(ModelInstance& instance, const Material& mat);
+void RegisterPhysicalModel(ModelInstance& instance, const Material& mat, bool isstatic);
 void UpdatePhysics(float deltaTime);
 void PrintPhysicsState();
 
@@ -30,4 +30,5 @@ void ApplyImpulse(PhysicalModel& pm, const glm::vec3& impulse, const glm::vec3& 
 float ComputeKineticEnergy(const PhysicalModel& pm);
 void UpdateDrag(const Camera& cam, double mouseX, double mouseY, int windowWidthz, int windowHeighty);
 void OnRightClickPressed(const Camera& cam, double mouseX, double mouseY, int windowWidthz, int windowHeighty);
+void CreateStaticFloor(float yPos, const Material& material);
 void OnRightClickReleased();

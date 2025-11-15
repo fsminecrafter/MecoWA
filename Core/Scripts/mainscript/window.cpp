@@ -126,7 +126,13 @@ int main(void)
     CreateObject(R"(Core\Resources\3dmodels\monke.obj)", monke2OBJ,
         glm::vec3(2.0f, 0.0f, 0.0f), glm::vec3(0.0f), glm::vec3(1.5f));
 
-	RegisterPhysicalModel(sceneModels[0], Material{ "Steel", 7850.0f, 0.6f, 0.1f, 0.8f,"" });
+    OBJData floor;
+    CreateObject(R"(Core\Resources\3dmodels\floor.obj)", floor,
+        glm::vec3(0.0f, -5.0f, 0.0f), glm::vec3(0.0f), glm::vec3(1.0f));
+
+	RegisterPhysicalModel(sceneModels[0], Material{ "Steel", 7850.0f, 0.6f, 0.1f, 0.8f,"" }, false);
+	RegisterPhysicalModel(sceneModels[3], Material{ "Aluminum", 2700.0f, 0.4f, 0.2f, 1.05f,"" }, true);
+
 
     float lastFrame = 0.0f;
     while (!glfwWindowShouldClose(window)) {

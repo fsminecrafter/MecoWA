@@ -8,6 +8,7 @@
 #include <glm/gtx/intersect.hpp>
 #include <cmath>
 #include <limits>
+#include "objloader.h"
 
 std::vector<PhysicalModel> physicalModels;
 
@@ -69,10 +70,18 @@ static glm::vec3 ClosestPointOnTriangle(const glm::vec3& p, const glm::vec3& a, 
     return a + ab * v + ac * w;
 }
 
-// compute model-space AABB transformed to world space
 static void ComputeAABB(const ModelInstance& inst, glm::vec3& outMin, glm::vec3& outMax) {
     const auto& verts = inst.model.vertexCoords;
+
     if (verts.empty()) {
+        outMin = inst.position;
+        outMax = inst.position;
+        return;
+    }
+
+    if (verts.size() % 3 != 0) {
+        std::cerr << "[ComputeAABB] Warning: vertexCoords.size() is not multiple of 3! "
+            << "size=" << verts.size() << std::endl;
         outMin = inst.position;
         outMax = inst.position;
         return;
@@ -81,7 +90,8 @@ static void ComputeAABB(const ModelInstance& inst, glm::vec3& outMin, glm::vec3&
     glm::mat4 M = ComputeModelMatrix(inst);
     outMin = glm::vec3(std::numeric_limits<float>::infinity());
     outMax = glm::vec3(-std::numeric_limits<float>::infinity());
-    for (size_t i = 0; i < verts.size(); i += 3) {
+
+    for (size_t i = 0; i + 2 < verts.size(); i += 3) {
         glm::vec4 p(verts[i + 0], verts[i + 1], verts[i + 2], 1.0f);
         glm::vec3 pw = glm::vec3(M * p);
         outMin = glm::min(outMin, pw);
@@ -303,10 +313,14 @@ float ComputeKineticEnergy(const PhysicalModel& pm) {
 
 // -------------------- main physics loop --------------------
 
-void RegisterPhysicalModel(ModelInstance& instance, const Material& mat) {
+void RegisterPhysicalModel(ModelInstance& instance, const Material& mat, bool isstatic) {
     // compute volume & centroid (reuse your existing method or call ComputeVolumeAndCentroid if available)
     // For brevity assume you have phys.volumeCM3 and centerOfGravity already computed previously
     // Here we approximate mass from volume * density (volume in m^3)
+    if (&instance == nullptr) {
+        std::cerr << "[Physics] ERROR: trying to register null ModelInstance\n";
+        return;
+    }
     glm::vec3 cg = instance.position + glm::vec3(0.0f); // if you already compute centroid, use that
     float volume_m3 = (instance.model.vertexCoords.size() > 0) ? 1e-6f : 0.0f; // fallback hack: user should compute
     float mass = std::max(0.001f, volume_m3 * mat.density); // guard
@@ -319,6 +333,7 @@ void RegisterPhysicalModel(ModelInstance& instance, const Material& mat) {
     phys.angularVelocity = glm::vec3(0.0f);
     phys.centerOfGravity = glm::vec3(0.0f);
     phys.volumeCM3 = 0.0f;
+	phys.isStatic = isstatic;
 
     // inertia initialization: user should compute accurate inertia; we set diagonal approximate
     float r = 0.5f;
