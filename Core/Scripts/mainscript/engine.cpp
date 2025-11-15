@@ -109,22 +109,23 @@ ModelInstance& CreateObject(const std::string& path, OBJData& objDataVar,
     std::mt19937 rng((unsigned int)time(nullptr));
     std::uniform_real_distribution<float> dist(0.3f, 1.0f);
 
+    instance.vertexData.clear();
+    instance.elementData.clear();
+
     for (size_t i = 0; i < elementCount; ++i) {
         unsigned idx = objDataVar.elementArray[i];
 
+        // Check vertex bounds
         if (idx * 3 + 2 >= objDataVar.vertexCoords.size()) {
-            std::cerr << "[Scene] Warning: invalid vertex index " << idx << " in element array\n";
-            continue;
+            std::cerr << "[Scene] Warning: invalid vertex index " << idx << " in element array, skipping\n";
+            continue; // skip this element completely
         }
 
-
         // --- Position ---
-        glm::vec3 posV(0.0f);
-        if (idx * 3 + 2 < objDataVar.vertexCoords.size())
-            posV = glm::vec3(
-                objDataVar.vertexCoords[idx * 3 + 0],
-                objDataVar.vertexCoords[idx * 3 + 1],
-                objDataVar.vertexCoords[idx * 3 + 2]);
+        glm::vec3 posV(
+            objDataVar.vertexCoords[idx * 3 + 0],
+            objDataVar.vertexCoords[idx * 3 + 1],
+            objDataVar.vertexCoords[idx * 3 + 2]);
 
         // --- Color ---
         glm::vec3 colV(1.0f);
@@ -149,14 +150,17 @@ ModelInstance& CreateObject(const std::string& path, OBJData& objDataVar,
                 objDataVar.vertexUVs[idx * 2 + 0],
                 objDataVar.vertexUVs[idx * 2 + 1]);
 
+        // Store vertex
         instance.vertexData.insert(instance.vertexData.end(),
             { posV.x, posV.y, posV.z,
               colV.x, colV.y, colV.z,
               normV.x, normV.y, normV.z,
               uvV.x, uvV.y });
+
+        // Add corresponding element index (0-based for this new vertex)
+        instance.elementData.push_back((unsigned int)(instance.vertexData.size() / 11 - 1));
     }
 
-    instance.elementData.assign(objDataVar.elementArray.begin(), objDataVar.elementArray.end());
 
     // --- Upload to GPU ---
     glGenVertexArrays(1, &instance.VAO);

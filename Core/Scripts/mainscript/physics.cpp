@@ -317,10 +317,6 @@ void RegisterPhysicalModel(ModelInstance& instance, const Material& mat, bool is
     // compute volume & centroid (reuse your existing method or call ComputeVolumeAndCentroid if available)
     // For brevity assume you have phys.volumeCM3 and centerOfGravity already computed previously
     // Here we approximate mass from volume * density (volume in m^3)
-    if (&instance == nullptr) {
-        std::cerr << "[Physics] ERROR: trying to register null ModelInstance\n";
-        return;
-    }
     glm::vec3 cg = instance.position + glm::vec3(0.0f); // if you already compute centroid, use that
     float volume_m3 = (instance.model.vertexCoords.size() > 0) ? 1e-6f : 0.0f; // fallback hack: user should compute
     float mass = std::max(0.001f, volume_m3 * mat.density); // guard
