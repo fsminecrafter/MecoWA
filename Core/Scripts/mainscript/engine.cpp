@@ -16,6 +16,20 @@ ModelInstance CreateModelInstance(const OBJData& model, glm::vec3 pos, glm::vec3
     instance.position = pos;
     instance.rotation = rot;
     instance.scale = glm::vec3(1.0f);
+    if (model.vertexCoords.size() % 3 == 0)
+        instance.vertexCount = static_cast<unsigned>(model.vertexCoords.size() / 3);
+    else {
+        std::cerr << "[ModelInstance] Warning: vertexCoords not divisible by 3\n";
+        instance.vertexCount = 0;
+    }
+
+    if (model.elementArray.size() % 3 == 0)
+        instance.indiciesCount = static_cast<unsigned>(model.elementArray.size() / 3);
+    else {
+        std::cerr << "[ModelInstance] Warning: elementArray not divisible by 3\n";
+        instance.indiciesCount = 0;
+    }
+
     return instance;
 }
 

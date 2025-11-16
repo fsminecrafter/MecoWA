@@ -16,6 +16,9 @@
     <Filter Include="Others">
       <UniqueIdentifier>{d4fb57b1-f485-4355-9ac5-854ff1885b16}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Gitinclusivefiles">
+      <UniqueIdentifier>{c2553bde-a798-4f94-83f3-b2f2433ca415}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="core\scripts\mainscript\window.cpp">
@@ -37,6 +40,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Core\Scripts\mainscript\physics.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Scripts\mainscript\ComputeInertiaTensor.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -77,6 +83,9 @@
     <ClInclude Include="Core\Scripts\mainscript\material_registry.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Core\Scripts\mainscript\ComputeInertiaTensor.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="Core\Resources\lighting.glsl">
@@ -96,6 +105,9 @@
     </None>
     <None Include=".gitignore">
       <Filter>Others</Filter>
+    </None>
+    <None Include="Core\Data\floor.blend">
+      <Filter>Gitinclusivefiles</Filter>
     </None>
   </ItemGroup>
 </Project>

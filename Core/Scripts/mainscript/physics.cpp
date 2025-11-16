@@ -9,6 +9,7 @@
 #include <cmath>
 #include <limits>
 #include "objloader.h"
+#include "ComputeInertiaTensor.h"
 
 std::vector<PhysicalModel> physicalModels;
 
@@ -143,49 +144,56 @@ std::vector<Contact> NarrowphaseGenerateContacts(PhysicalModel* A, PhysicalModel
     // Threshold for contact detection (small penetration tolerance)
     const float contactThreshold = 0.001f;
 
-    // A vertices -> B triangles
-    for (size_t vi = 0; vi + 2 < vertsA.size(); vi += 3) {
-        glm::vec3 pv = glm::vec3(MA * glm::vec4(vertsA[vi], vertsA[vi + 1], vertsA[vi + 2], 1.0f));
-        for (size_t t = 0; t + 2 < idxB.size(); t += 3) {
-            glm::vec3 b0 = glm::vec3(MB * glm::vec4(vertsB[idxB[t + 0] * 3 + 0], vertsB[idxB[t + 0] * 3 + 1], vertsB[idxB[t + 0] * 3 + 2], 1.0f));
-            glm::vec3 b1 = glm::vec3(MB * glm::vec4(vertsB[idxB[t + 1] * 3 + 0], vertsB[idxB[t + 1] * 3 + 1], vertsB[idxB[t + 1] * 3 + 2], 1.0f));
-            glm::vec3 b2 = glm::vec3(MB * glm::vec4(vertsB[idxB[t + 2] * 3 + 0], vertsB[idxB[t + 2] * 3 + 1], vertsB[idxB[t + 2] * 3 + 2], 1.0f));
+    // Loop vertices correctly
+    for (size_t vi = 0; vi < vertsA.size() / 3; vi++)
+    {
+        glm::vec3 pv = glm::vec3(
+            MA * glm::vec4(
+                vertsA[vi * 3 + 0],
+                vertsA[vi * 3 + 1],
+                vertsA[vi * 3 + 2],
+                1.0f
+            )
+        );
+
+        for (size_t t = 0; t < idxB.size(); t += 3)
+        {
+            glm::vec3 b0 = glm::vec3(MB * glm::vec4(
+                vertsB[idxB[t] * 3 + 0],
+                vertsB[idxB[t] * 3 + 1],
+                vertsB[idxB[t] * 3 + 2], 1.0f));
+
+            glm::vec3 b1 = glm::vec3(MB * glm::vec4(
+                vertsB[idxB[t + 1] * 3 + 0],
+                vertsB[idxB[t + 1] * 3 + 1],
+                vertsB[idxB[t + 1] * 3 + 2], 1.0f));
+
+            glm::vec3 b2 = glm::vec3(MB * glm::vec4(
+                vertsB[idxB[t + 2] * 3 + 0],
+                vertsB[idxB[t + 2] * 3 + 1],
+                vertsB[idxB[t + 2] * 3 + 2], 1.0f));
+
+            glm::vec3 triNormal = glm::normalize(glm::cross(b1 - b0, b2 - b0));
             glm::vec3 closest = ClosestPointOnTriangle(pv, b0, b1, b2);
             glm::vec3 diff = pv - closest;
             float dist = glm::length(diff);
-            if (dist <= contactThreshold) {
+
+            if (dist <= contactThreshold)
+            {
+                // orient normal correctly
+                if (glm::dot(diff, triNormal) < 0.0f)
+                    triNormal = -triNormal;
+
                 Contact c;
-                c.A = A; c.B = B;
-                c.point = (pv + closest) * 0.5f;
-                c.normal = glm::normalize((closest - pv) + glm::vec3(1e-8f)); // from A->B
+                c.A = A;
+                c.B = B;
+                c.point = 0.5f * (pv + closest);
+                c.normal = triNormal;
                 c.penetration = contactThreshold - dist;
                 result.push_back(c);
             }
         }
     }
-
-    // B vertices -> A triangles
-    for (size_t vi = 0; vi + 2 < vertsB.size(); vi += 3) {
-        glm::vec3 pv = glm::vec3(MB * glm::vec4(vertsB[vi], vertsB[vi + 1], vertsB[vi + 2], 1.0f));
-        for (size_t t = 0; t + 2 < idxA.size(); t += 3) {
-            glm::vec3 a0 = glm::vec3(MA * glm::vec4(vertsA[idxA[t + 0] * 3 + 0], vertsA[idxA[t + 0] * 3 + 1], vertsA[idxA[t + 0] * 3 + 2], 1.0f));
-            glm::vec3 a1 = glm::vec3(MA * glm::vec4(vertsA[idxA[t + 1] * 3 + 0], vertsA[idxA[t + 1] * 3 + 1], vertsA[idxA[t + 1] * 3 + 2], 1.0f));
-            glm::vec3 a2 = glm::vec3(MA * glm::vec4(vertsA[idxA[t + 2] * 3 + 0], vertsA[idxA[t + 2] * 3 + 1], vertsA[idxA[t + 2] * 3 + 2], 1.0f));
-            glm::vec3 closest = ClosestPointOnTriangle(pv, a0, a1, a2);
-            glm::vec3 diff = pv - closest;
-            float dist = glm::length(diff);
-            if (dist <= contactThreshold) {
-                Contact c;
-                c.A = A; c.B = B;
-                c.point = (pv + closest) * 0.5f;
-                c.normal = glm::normalize((closest - pv) + glm::vec3(1e-8f)); // from B->A (we will flip)
-                c.normal = -c.normal; // ensure normal is A -> B
-                c.penetration = contactThreshold - dist;
-                result.push_back(c);
-            }
-        }
-    }
-
     return result;
 }
 
@@ -311,33 +319,194 @@ float ComputeKineticEnergy(const PhysicalModel& pm) {
     return trans + rot;
 }
 
+// Computes both volume (m^3) and center-of-gravity (centroid) in same units as mesh
+// Returns pair: (volume_m3, centroid)
+// robust ComputeVolumeAndCentroid: uses absolute tetra volumes by default
+static std::pair<double, glm::dvec3> ComputeVolumeAndCentroid(const ModelInstance& instance) {
+    const auto& verts_f = instance.model.vertexCoords;
+    const auto& idx = instance.model.elementArray;
+
+    const size_t vcount = verts_f.size() / 3;
+    std::vector<glm::dvec3> verts;
+    verts.reserve(vcount);
+    for (size_t i = 0; i < vcount; ++i) {
+        verts.emplace_back(
+            (double)verts_f[i * 3 + 0],
+            (double)verts_f[i * 3 + 1],
+            (double)verts_f[i * 3 + 2]
+        );
+    }
+
+    double signedVolSum = 0.0;
+    glm::dvec3 signedWeightedCentroid(0.0);
+
+    double absVolSum = 0.0;
+    glm::dvec3 absWeightedCentroid(0.0);
+
+    // helper lambda for signed tetra volume
+    auto SignedTetraVolume = [](const glm::dvec3& a, const glm::dvec3& b, const glm::dvec3& c) -> double {
+        return glm::dot(a, glm::cross(b, c)) / 6.0;
+        };
+
+    for (size_t i = 0; i + 2 < idx.size(); i += 3) {
+        uint32_t i0 = idx[i + 0];
+        uint32_t i1 = idx[i + 1];
+        uint32_t i2 = idx[i + 2];
+        if (i0 >= verts.size() || i1 >= verts.size() || i2 >= verts.size()) continue;
+
+        const glm::dvec3& v0 = verts[i0];
+        const glm::dvec3& v1 = verts[i1];
+        const glm::dvec3& v2 = verts[i2];
+
+        // signed tetra volume (origin, v0, v1, v2)
+        double tetSignedVol = SignedTetraVolume(v0, v1, v2);
+        // centroid of that tetra (origin + v0 + v1 + v2) / 4  -> since origin is zero: (v0+v1+v2)/4
+        glm::dvec3 tetCentroid = (v0 + v1 + v2) * 0.25;
+
+        signedVolSum += tetSignedVol;
+        signedWeightedCentroid += tetCentroid * tetSignedVol;
+
+        double tetAbsVol = std::abs(tetSignedVol);
+        absVolSum += tetAbsVol;
+        absWeightedCentroid += tetCentroid * tetAbsVol;
+    }
+
+    const double eps = 1e-12;
+    glm::dvec3 centroid;
+    double volume_m3;
+
+    // --- Choose robust absolute-volume centroid if signed volume is small or inconsistent ---
+    if (std::abs(signedVolSum) > eps) {
+        // If signed volume is large and consistent, use it (exact for closed/wound meshes)
+        centroid = signedWeightedCentroid / signedVolSum;
+        volume_m3 = signedVolSum;
+    }
+    else if (absVolSum > eps) {
+        // Fallback: use absolute-volume weighted centroid (robust for mixed winding / non-closed)
+        centroid = absWeightedCentroid / absVolSum;
+        // 'volume' from absolute tetra volumes -- may overcount if mesh self-intersects,
+        // but it's a sensible positive measure of enclosed mass for physics mass estimation.
+        volume_m3 = absVolSum;
+    }
+    else {
+        // Last resort: surface-area centroid fallback
+        double totalArea = 0.0;
+        glm::dvec3 areaWeighted(0.0);
+        for (size_t i = 0; i + 2 < idx.size(); i += 3) {
+            uint32_t i0 = idx[i + 0], i1 = idx[i + 1], i2 = idx[i + 2];
+            if (i0 >= verts.size() || i1 >= verts.size() || i2 >= verts.size()) continue;
+            glm::dvec3 v0 = verts[i0], v1 = verts[i1], v2 = verts[i2];
+            double area = 0.5 * glm::length(glm::cross(v1 - v0, v2 - v0));
+            glm::dvec3 triC = (v0 + v1 + v2) / 3.0;
+            areaWeighted += triC * area;
+            totalArea += area;
+        }
+        if (totalArea > eps) centroid = areaWeighted / totalArea;
+        else centroid = glm::dvec3(0.0);
+        volume_m3 = 0.0;
+    }
+
+#ifdef Debug
+    glm::dvec3 signedCentroid = (std::abs(signedVolSum) > eps) ? (signedWeightedCentroid / signedVolSum) : glm::dvec3(0.0);
+    glm::dvec3 absCentroid = (absVolSum > eps) ? (absWeightedCentroid / absVolSum) : glm::dvec3(0.0);
+    double signedVolAbs = std::abs(signedVolSum);
+    double absVolAbs = absVolSum;
+    std::cout << std::fixed << std::setprecision(6)
+        << "[ComputeVolumeAndCentroid] signedVol=" << signedVolSum
+        << " | abs(signedVol)=" << signedVolAbs
+        << " | absAccumVol=" << absVolAbs << "\n"
+        << "  signedCentroid=(" << (double)signedCentroid.x << "," << (double)signedCentroid.y << "," << (double)signedCentroid.z << ")\n"
+        << "  absCentroid=(" << (double)absCentroid.x << "," << (double)absCentroid.y << "," << (double)absCentroid.z << ")\n"
+        << "  chosenCentroid=(" << (double)centroid.x << "," << (double)centroid.y << "," << (double)centroid.z << ")\n";
+    if (std::abs(signedVolSum) <= eps) {
+        std::cout << "[ComputeVolumeAndCentroid] NOTE: signed volume near-zero or inconsistent winding. Using absolute-volume centroid.\n";
+    }
+#endif
+
+    return { volume_m3, centroid };
+}
+
 // -------------------- main physics loop --------------------
 
 void RegisterPhysicalModel(ModelInstance& instance, const Material& mat, bool isStatic) {
     // Store pointer to instance (avoid dangling reference)
+
+        // check already registered (avoid duplicates)
+    for (auto& pm : physicalModels) {
+        if (pm.instance == &instance) {
+            std::cerr << "[RegisterPhysicalModel] Warning: instance already registered, ignoring.\n";
+            return;
+        }
+    }
+
+    // compute volume & centroid from mesh (robust)
+    double volume_m3 = 0.0;
+    glm::dvec3 centroid_d(0.0);
+    try {
+        auto res = ComputeVolumeAndCentroid(instance);
+        volume_m3 = res.first;
+        centroid_d = res.second;
+    }
+    catch (...) {
+        // fallback safe behavior
+        std::cerr << "[RegisterPhysicalModel] ComputeVolumeAndCentroid threw, falling back.\n";
+    }
+
+    double absVolume = std::abs(volume_m3);
+    // sensible fallback volume if mesh failed (not 1e-6 m^3 unless you want that)
+    const double fallbackVolume = 1e-3; // 1 liter ~ 0.001 m^3 => heavier fallback
+    if (absVolume < 1e-12) absVolume = fallbackVolume;
+
+    float mass = (float)(absVolume * (double)mat.density);
+
+    // clamp minimal mass to avoid singular physics
+    const float minMass = 0.01f; // 10 grams minimum
+    if (mass < minMass && !isStatic) mass = minMass;
+
     PhysicalEntity phys;
-    phys.instance = &instance; // <- must point to the actual object
-    phys.mass = std::max(0.001f, 1e-6f * mat.density); // crude fallback
+    phys.instance = instance; // store pointer to the real instance
+    phys.mass = isStatic ? std::numeric_limits<float>::infinity() : mass;
     phys.material = mat;
     phys.velocity = glm::vec3(0.0f);
     phys.angularVelocity = glm::vec3(0.0f);
-    phys.centerOfGravity = glm::vec3(0.0f);
-    phys.volumeCM3 = 0.0f;
+    phys.centerOfGravity = glm::vec3(centroid_d); // use computed centroid
+    phys.volumeCM3 = (float)(absVolume * 1e6);    // m^3 -> cm^3
     phys.isStatic = isStatic;
 
-    // approximate inertia
-    float r = 0.5f;
-    float I = 0.4f * phys.mass * r * r;
-    phys.inertiaTensorLocal = glm::mat3(I);
-    phys.inertiaTensorLocalInv = glm::inverse(phys.inertiaTensorLocal);
+    glm::mat3 I_local(0.0f);
+    bool haveInertia = false;
+    try {
+        glm::dmat3 I_d = ComputeInertiaTensor(instance, glm::dvec3(centroid_d), mat.density);
+        I_local = glm::mat3(I_d);
+        haveInertia = true;
+    }
+    catch (...) { haveInertia = false; }
+
+    if (!haveInertia) {
+        float r = std::max(0.1f, (float)std::cbrt(absVolume)); // heuristic radius
+        float Ival = 0.4f * (isStatic ? 1.0f : phys.mass) * r * r;
+        I_local = glm::mat3(Ival);
+    }
+    phys.inertiaTensorLocal = I_local;
+    // safe inverse (avoid singular)
+    glm::mat3 safe = phys.inertiaTensorLocal + glm::mat3(1e-8f);
+    phys.inertiaTensorLocalInv = glm::inverse(safe);
+
     phys.angularMomentum = glm::vec3(0.0f);
+    phys.forces = glm::vec3(0.0f);
+    phys.torque = glm::vec3(0.0f);
 
     physicalModels.push_back({ &instance, phys });
 
 #ifdef Debug
-    std::cout << "[Physics] Registered model mass=" << phys.mass 
-              << " vertices=" << instance.model.vertexCoords.size()
-              << " indices=" << instance.model.elementArray.size() << "\n";
+    std::cout << std::fixed << std::setprecision(6)
+        << "[Register] model at " << &instance
+        << " | vol(m^3)=" << absVolume
+        << " | vol(cm^3)=" << (absVolume * 1e6)
+        << " | centroid=(" << centroid_d.x << "," << centroid_d.y << "," << centroid_d.z << ")"
+        << " | mass(kg)=" << phys.mass
+        << " | isStatic=" << (isStatic ? "Yes" : "No")
+        << "\n";
 #endif
 }
 
@@ -411,11 +580,30 @@ void UpdatePhysics(float deltaTime) {
         pm.instance->position += pm.physics.velocity * deltaTime;
     }
 
-    // Debug energy
 #ifdef Debug
-    float totalE = 0.0f;
-    for (auto& pm : physicalModels) totalE += ComputeKineticEnergy(pm);
-    std::cout << "[Physics] total kinetic energy: " << totalE << std::endl;
+    std::cout << "\n[Physics Debug] ==============================\n";
+
+    int index = 0;
+    for (auto& pm : physicalModels)
+    {
+        const auto& P = pm.physics;     // shortcut
+        const auto& T = *pm.instance;   // ModelInstance transform
+
+        float KE = ComputeKineticEnergy(pm);
+
+        std::cout
+            << "[Object " << index << "]\n"
+            << "  Pos:      (" << T.position.x << ", " << T.position.y << ", " << T.position.z << ")\n"
+            << "  Rot:      (" << T.rotation.x << ", " << T.rotation.y << ", " << T.rotation.z << ")\n"
+            << "  Vel:      (" << P.velocity.x << ", " << P.velocity.y << ", " << P.velocity.z << ")\n"
+            << "  Ang Vel:  (" << P.angularVelocity.x << ", " << P.angularVelocity.y << ", " << P.angularVelocity.z << ")\n"
+            << "  Mass:      " << P.mass << "\n"
+            << "  Kinetic E: " << KE << "\n\n";
+
+        index++;
+    }
+
+    std::cout << "==============================================\n";
 #endif
 }
 
@@ -467,14 +655,14 @@ PhysicalModel* RaycastModels(const glm::vec3& rayOrigin,
         glm::mat4 modelMat = ComputeModelMatrix(obj.physics.instance);
 
         for (size_t i = 0; i < indices.size(); i += 3) {
-			size_t i0 = indices[i]*3;
-			size_t i1 = indices[i+1]*3;
-			size_t i2 = indices[i+2]*3;
-			if (i0+2 >= verts.size() || i1+2 >= verts.size() || i2+2 >= verts.size()) continue;
-			
-			glm::vec3 v0 = glm::vec3(modelMat * glm::vec4(verts[i0+0], verts[i0+1], verts[i0+2], 1.0f));
-			glm::vec3 v1 = glm::vec3(modelMat * glm::vec4(verts[i1+0], verts[i1+1], verts[i1+2], 1.0f));
-			glm::vec3 v2 = glm::vec3(modelMat * glm::vec4(verts[i2+0], verts[i2+1], verts[i2+2], 1.0f));
+            size_t i0 = indices[i] * 3;
+            size_t i1 = indices[i + 1] * 3;
+            size_t i2 = indices[i + 2] * 3;
+            if (i0 + 2 >= verts.size() || i1 + 2 >= verts.size() || i2 + 2 >= verts.size()) continue;
+
+            glm::vec3 v0 = glm::vec3(modelMat * glm::vec4(verts[i0 + 0], verts[i0 + 1], verts[i0 + 2], 1.0f));
+            glm::vec3 v1 = glm::vec3(modelMat * glm::vec4(verts[i1 + 0], verts[i1 + 1], verts[i1 + 2], 1.0f));
+            glm::vec3 v2 = glm::vec3(modelMat * glm::vec4(verts[i2 + 0], verts[i2 + 1], verts[i2 + 2], 1.0f));
 
             float dist;
             if (RayIntersectsTriangle(rayOrigin, rayDir, v0, v1, v2, dist)) {

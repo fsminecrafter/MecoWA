@@ -134,6 +134,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Core\Resources\glad\src\glad.c" />
+    <ClCompile Include="Core\Scripts\mainscript\ComputeInertiaTensor.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\engine.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\objloader.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\physics.cpp" />
@@ -144,6 +145,7 @@
   <ItemGroup>
     <ClInclude Include="core\resources\glfw\include\glfw\glfw3.h" />
     <ClInclude Include="core\resources\glfw\include\glfw\glfw3native.h" />
+    <ClInclude Include="Core\Scripts\mainscript\ComputeInertiaTensor.h" />
     <ClInclude Include="Core\Scripts\mainscript\engine.h" />
     <ClInclude Include="Core\Scripts\mainscript\engine_camera.h" />
     <ClInclude Include="Core\Scripts\mainscript\material_registry.h" />
@@ -158,6 +160,7 @@
   <ItemGroup>
     <None Include=".gitattributes" />
     <None Include=".gitignore" />
+    <None Include="Core\Data\floor.blend" />
     <None Include="Core\Resources\fragment.glsl" />
     <None Include="Core\Resources\lighting.glsl" />
     <None Include="Core\Resources\vertex.glsl" />
