@@ -557,23 +557,6 @@ void RegisterPhysicalModel(ModelInstance& instance, const Material& mat, bool is
 #endif
 }
 
-// Pretty-print
-void PrintPhysicsState() {
-    std::cout << "====== Physics Debug Info ======" << std::endl;
-    int i = 0;
-    for (auto& obj : physicalModels) {
-        if (!obj.instance) continue;
-        glm::vec3 centerWorld = ComputeCenterWorld(*obj.instance, obj.physics.centerOfGravity);
-        std::cout << "Object[" << i++ << "] mass=" << obj.physics.mass
-            << " pos=(" << obj.instance->position.x << "," << obj.instance->position.y << "," << obj.instance->position.z << ")"
-            << " com=(" << centerWorld.x << "," << centerWorld.y << "," << centerWorld.z << ")"
-            << " vel=(" << obj.physics.velocity.x << "," << obj.physics.velocity.y << "," << obj.physics.velocity.z << ")"
-            << " angVel=(" << obj.physics.angularVelocity.x << "," << obj.physics.angularVelocity.y << "," << obj.physics.angularVelocity.z << ")\n";
-    }
-    std::cout << "================================" << std::endl;
-}
-
-
 void UpdatePhysics(float deltaTime) {
     if (deltaTime <= 0.0f) return;
 
@@ -593,7 +576,147 @@ void UpdatePhysics(float deltaTime) {
         }
     }
 
-    // --- 2) collision detection + iterative resolution ---
+    // --- 2) determine substeps and apply gravity half-step ---
+    int maxSubsteps = 1;
+    for (auto& pm : physicalModels) {
+        if (!pm.instance || pm.physics.isStatic) continue;
+        int substeps = ComputeSubsteps(pm, deltaTime);
+        maxSubsteps = std::max(maxSubsteps, substeps);
+    }
+
+    float subDelta = deltaTime / maxSubsteps;
+
+    for (int step = 0; step < maxSubsteps; ++step) {
+
+        // --- 2a) gravity half-step ---
+        for (auto& pm : physicalModels) {
+            if (!pm.instance || pm.physics.isStatic) continue;
+            pm.physics.velocity += gravity * 0.5f * subDelta;
+        }
+
+        // --- 2b) collision detection + CCD ---
+        for (auto& pm : physicalModels) {
+            if (!pm.instance || pm.physics.isStatic) continue;
+
+            glm::vec3 hitPoint;
+            PhysicalModel* hitModel = nullptr;
+            if (CCDCheck(pm, subDelta, hitPoint, hitModel)) {
+                if (hitModel) {
+                    // resolve collision impulse immediately for CCD hit
+                    Contact c;
+                    c.A = &pm;
+                    c.B = hitModel;
+                    c.normal = glm::normalize(pm.instance->position - hitPoint);
+                    c.penetration = 0.0f; // small offset already applied
+                    ResolveContactImpulse(c);
+                }
+            } else {
+                // normal semi-implicit integration if no CCD hit
+                pm.instance->position += pm.physics.velocity * subDelta;
+            }
+        }
+
+        // --- 2c) collision resolution for contacts ---
+        auto pairs = BroadphaseGeneratePairs();
+        std::vector<Contact> allContacts;
+        for (auto& p : pairs) {
+            auto cs = NarrowphaseGenerateContacts(p.A, p.B);
+            allContacts.insert(allContacts.end(), cs.begin(), cs.end());
+        }
+
+        const int iterations = 8;
+        const float k_slop = 0.01f;
+        const float percent = 0.2f;
+        const float maxCorrection = 0.02f;
+
+        for (int it = 0; it < iterations; ++it) {
+            for (auto& c : allContacts) {
+                ResolveContactImpulse(c);
+
+                float invMassA = (!c.A->physics.isStatic && c.A->physics.mass > 0.0f) ? 1.0f / c.A->physics.mass : 0.0f;
+                float invMassB = (!c.B->physics.isStatic && c.B->physics.mass > 0.0f) ? 1.0f / c.B->physics.mass : 0.0f;
+                float invMassSum = invMassA + invMassB;
+                if (c.penetration > k_slop && invMassSum > 0.0f) {
+                    float correction = glm::clamp((c.penetration - k_slop) / invMassSum * percent, -maxCorrection, maxCorrection);
+                    if (!c.A->physics.isStatic) c.A->instance->position += correction * c.normal * invMassA;
+                    if (!c.B->physics.isStatic) c.B->instance->position -= correction * c.normal * invMassB;
+                }
+            }
+        }
+
+        // --- 2d) finish gravity half-step ---
+        for (auto& pm : physicalModels) {
+            if (!pm.instance || pm.physics.isStatic) continue;
+            pm.physics.velocity += gravity * 0.5f * subDelta;
+        }
+    }
+
+    // --- 3) rotational dynamics ---
+    for (auto& pm : physicalModels) {
+        if (!pm.instance || pm.physics.isStatic) continue;
+
+        glm::quat q = glm::quat(glm::radians(pm.instance->rotation));
+        glm::mat3 R = glm::mat3_cast(q);
+
+        pm.physics.inertiaTensorWorld = R * pm.physics.inertiaTensorLocal * glm::transpose(R);
+        glm::mat3 eps(0.0f); eps[0][0] = eps[1][1] = eps[2][2] = 1e-8f;
+        pm.physics.inertiaTensorWorldInv = glm::inverse(pm.physics.inertiaTensorWorld + eps);
+
+        pm.physics.angularVelocity = pm.physics.inertiaTensorWorldInv * pm.physics.angularMomentum;
+
+        glm::quat wq(0.0f, pm.physics.angularVelocity.x, pm.physics.angularVelocity.y, pm.physics.angularVelocity.z);
+        glm::quat qNew = glm::normalize(q + 0.5f * wq * q * deltaTime);
+        pm.instance->rotation = glm::degrees(glm::eulerAngles(qNew));
+    }
+
+#ifdef Debug
+    PrintPhysicsState();
+#endif
+}
+
+// Pretty-print
+void PrintPhysicsState() {
+    std::cout << "====== Physics Debug Info ======" << std::endl;
+    int i = 0;
+    for (auto& obj : physicalModels) {
+        if (!obj.instance) continue;
+        glm::vec3 centerWorld = ComputeCenterWorld(*obj.instance, obj.physics.centerOfGravity);
+        std::cout << "Object[" << i++ << "] mass=" << obj.physics.mass
+            << " pos=(" << obj.instance->position.x << "," << obj.instance->position.y << "," << obj.instance->position.z << ")"
+            << " com=(" << centerWorld.x << "," << centerWorld.y << "," << centerWorld.z << ")"
+            << " vel=(" << obj.physics.velocity.x << "," << obj.physics.velocity.y << "," << obj.physics.velocity.z << ")"
+            << " angVel=(" << obj.physics.angularVelocity.x << "," << obj.physics.angularVelocity.y << "," << obj.physics.angularVelocity.z << ")\n";
+    }
+    std::cout << "================================" << std::endl;
+}
+
+void UpdatePhysics(float deltaTime) {
+    if (deltaTime <= 0.0f) return;
+
+    const glm::vec3 gravity(0.0f, -9.81f, 0.0f);
+
+    // --- 1) apply accumulated forces (F = m a) ---
+    for (auto& pm : physicalModels) {
+        if (!pm.instance || pm.physics.isStatic) continue;
+
+        if (glm::length(pm.physics.forces) > 0.0f && pm.physics.mass > 0.0f) {
+            // Semi-implicit velocity update
+            pm.physics.velocity += (pm.physics.forces / pm.physics.mass) * deltaTime;
+            pm.physics.forces = glm::vec3(0.0f);
+        }
+        if (glm::length(pm.physics.torque) > 0.0f) {
+            pm.physics.angularMomentum += pm.physics.torque * deltaTime;
+            pm.physics.torque = glm::vec3(0.0f);
+        }
+    }
+
+    // --- 2) preliminary gravity integration (for hybrid stability) ---
+    for (auto& pm : physicalModels) {
+        if (!pm.instance || pm.physics.isStatic) continue;
+        pm.physics.velocity += gravity * deltaTime * 0.5f; // half-step for hybrid
+    }
+
+    // --- 3) collision detection + iterative resolution ---
     auto pairs = BroadphaseGeneratePairs();
     std::vector<Contact> allContacts;
     for (auto& p : pairs) {
@@ -604,13 +727,12 @@ void UpdatePhysics(float deltaTime) {
     const int iterations = 8;
     const float k_slop = 0.01f;
     const float percent = 0.2f;
-    const float maxCorrection = 0.02f; // limit per-frame correction
+    const float maxCorrection = 0.02f;
 
     for (int it = 0; it < iterations; ++it) {
         for (auto& c : allContacts) {
             ResolveContactImpulse(c);
 
-            // clamp positional correction to avoid huge jumps
             float invMassA = (!c.A->physics.isStatic && c.A->physics.mass > 0.0f) ? 1.0f / c.A->physics.mass : 0.0f;
             float invMassB = (!c.B->physics.isStatic && c.B->physics.mass > 0.0f) ? 1.0f / c.B->physics.mass : 0.0f;
             float invMassSum = invMassA + invMassB;
@@ -622,18 +744,18 @@ void UpdatePhysics(float deltaTime) {
         }
     }
 
-    // --- 3) apply gravity and integrate velocities ---
+    // --- 4) linear integration (final velocity update + position) ---
     for (auto& pm : physicalModels) {
         if (!pm.instance || pm.physics.isStatic) continue;
 
-        // apply gravity
-        pm.physics.velocity += gravity * deltaTime;
+        // finish gravity step
+        pm.physics.velocity += gravity * deltaTime * 0.5f;
 
-        // semi-implicit position integration
+        // hybrid: linear position semi-implicit
         pm.instance->position += pm.physics.velocity * deltaTime;
     }
 
-    // --- 4) rotational dynamics ---
+    // --- 5) rotational dynamics (hybrid angular integration) ---
     for (auto& pm : physicalModels) {
         if (!pm.instance || pm.physics.isStatic) continue;
 
@@ -641,12 +763,13 @@ void UpdatePhysics(float deltaTime) {
         glm::mat3 R = glm::mat3_cast(q);
 
         pm.physics.inertiaTensorWorld = R * pm.physics.inertiaTensorLocal * glm::transpose(R);
-        glm::mat3 eps(0.0f); eps[0][0] = eps[1][1] = eps[2][2] = 1e-8f; // diagonal only
+        glm::mat3 eps(0.0f); eps[0][0] = eps[1][1] = eps[2][2] = 1e-8f;
         pm.physics.inertiaTensorWorldInv = glm::inverse(pm.physics.inertiaTensorWorld + eps);
 
+        // angular velocity from angular momentum
         pm.physics.angularVelocity = pm.physics.inertiaTensorWorldInv * pm.physics.angularMomentum;
 
-        // integrate orientation
+        // integrate orientation (hybrid: quaternion with half-step torque)
         glm::quat wq(0.0f, pm.physics.angularVelocity.x, pm.physics.angularVelocity.y, pm.physics.angularVelocity.z);
         glm::quat qNew = glm::normalize(q + 0.5f * wq * q * deltaTime);
         pm.instance->rotation = glm::degrees(glm::eulerAngles(qNew));
@@ -656,6 +779,7 @@ void UpdatePhysics(float deltaTime) {
     PrintPhysicsState();
 #endif
 }
+
 static bool dragging = false;
 static PhysicalModel* draggedModel = nullptr;
 static glm::vec3 grabLocalOffset;
