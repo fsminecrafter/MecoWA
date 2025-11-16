@@ -1,3 +1,8 @@
+
+//Cherry engine CORE
+// Made by Joel_minecrafter
+
+
 #include "engine.h"
 #include <iostream>
 #include <vector>

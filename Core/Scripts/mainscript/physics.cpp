@@ -107,6 +107,14 @@ static bool AABBOverlap(const glm::vec3& aMin, const glm::vec3& aMax, const glm:
         (aMin.z <= bMax.z && aMax.z >= bMin.z);
 }
 
+// Helper: compute center-of-gravity in world space from stored local centroid
+static glm::vec3 ComputeCenterWorld(const ModelInstance& instance, const glm::vec3& centerLocal) {
+    // rotation -> matrix (assumes instance.rotation is Euler degrees)
+    glm::quat q = glm::quat(glm::radians(instance.rotation));
+    glm::mat3 R = glm::mat3_cast(q);
+    return instance.position + R * centerLocal * instance.scale; // account for scale
+}
+
 // -------------------- collision pipeline --------------------
 
 // broadphase: returns pairs that AABB-overlap
@@ -130,6 +138,8 @@ std::vector<Contact> BroadphaseGeneratePairs() {
 // narrowphase: vertex->triangle distance both ways to detect candidate contact
 std::vector<Contact> NarrowphaseGenerateContacts(PhysicalModel* A, PhysicalModel* B) {
     std::vector<Contact> result;
+    if (!A || !B) return result;
+
     const auto& meshA = A->physics.instance.model;
     const auto& meshB = B->physics.instance.model;
 
@@ -144,8 +154,9 @@ std::vector<Contact> NarrowphaseGenerateContacts(PhysicalModel* A, PhysicalModel
     // Threshold for contact detection (small penetration tolerance)
     const float contactThreshold = 0.001f;
 
-    // Loop vertices correctly
-    for (size_t vi = 0; vi < vertsA.size() / 3; vi++)
+    // Loop vertices correctly (iterate vertex count, not raw floats)
+    size_t vcountA = vertsA.size() / 3;
+    for (size_t vi = 0; vi < vcountA; ++vi)
     {
         glm::vec3 pv = glm::vec3(
             MA * glm::vec4(
@@ -156,22 +167,30 @@ std::vector<Contact> NarrowphaseGenerateContacts(PhysicalModel* A, PhysicalModel
             )
         );
 
-        for (size_t t = 0; t < idxB.size(); t += 3)
+        for (size_t t = 0; t + 2 < idxB.size(); t += 3)
         {
+            uint32_t i0 = idxB[t + 0];
+            uint32_t i1 = idxB[t + 1];
+            uint32_t i2 = idxB[t + 2];
+            // guard indices
+            if ((size_t)i0 * 3 + 2 >= vertsB.size() ||
+                (size_t)i1 * 3 + 2 >= vertsB.size() ||
+                (size_t)i2 * 3 + 2 >= vertsB.size()) continue;
+
             glm::vec3 b0 = glm::vec3(MB * glm::vec4(
-                vertsB[idxB[t] * 3 + 0],
-                vertsB[idxB[t] * 3 + 1],
-                vertsB[idxB[t] * 3 + 2], 1.0f));
+                vertsB[i0 * 3 + 0],
+                vertsB[i0 * 3 + 1],
+                vertsB[i0 * 3 + 2], 1.0f));
 
             glm::vec3 b1 = glm::vec3(MB * glm::vec4(
-                vertsB[idxB[t + 1] * 3 + 0],
-                vertsB[idxB[t + 1] * 3 + 1],
-                vertsB[idxB[t + 1] * 3 + 2], 1.0f));
+                vertsB[i1 * 3 + 0],
+                vertsB[i1 * 3 + 1],
+                vertsB[i1 * 3 + 2], 1.0f));
 
             glm::vec3 b2 = glm::vec3(MB * glm::vec4(
-                vertsB[idxB[t + 2] * 3 + 0],
-                vertsB[idxB[t + 2] * 3 + 1],
-                vertsB[idxB[t + 2] * 3 + 2], 1.0f));
+                vertsB[i2 * 3 + 0],
+                vertsB[i2 * 3 + 1],
+                vertsB[i2 * 3 + 2], 1.0f));
 
             glm::vec3 triNormal = glm::normalize(glm::cross(b1 - b0, b2 - b0));
             glm::vec3 closest = ClosestPointOnTriangle(pv, b0, b1, b2);
@@ -180,7 +199,7 @@ std::vector<Contact> NarrowphaseGenerateContacts(PhysicalModel* A, PhysicalModel
 
             if (dist <= contactThreshold)
             {
-                // orient normal correctly
+                // orient normal correctly (pointing from A -> B)
                 if (glm::dot(diff, triNormal) < 0.0f)
                     triNormal = -triNormal;
 
@@ -194,6 +213,66 @@ std::vector<Contact> NarrowphaseGenerateContacts(PhysicalModel* A, PhysicalModel
             }
         }
     }
+
+    // B vertices -> A triangles
+    size_t vcountB = vertsB.size() / 3;
+    for (size_t vi = 0; vi < vcountB; ++vi)
+    {
+        glm::vec3 pv = glm::vec3(
+            MB * glm::vec4(
+                vertsB[vi * 3 + 0],
+                vertsB[vi * 3 + 1],
+                vertsB[vi * 3 + 2],
+                1.0f
+            )
+        );
+
+        for (size_t t = 0; t + 2 < idxA.size(); t += 3)
+        {
+            uint32_t i0 = idxA[t + 0];
+            uint32_t i1 = idxA[t + 1];
+            uint32_t i2 = idxA[t + 2];
+            if ((size_t)i0 * 3 + 2 >= vertsA.size() ||
+                (size_t)i1 * 3 + 2 >= vertsA.size() ||
+                (size_t)i2 * 3 + 2 >= vertsA.size()) continue;
+
+            glm::vec3 a0 = glm::vec3(MA * glm::vec4(
+                vertsA[i0 * 3 + 0],
+                vertsA[i0 * 3 + 1],
+                vertsA[i0 * 3 + 2], 1.0f));
+
+            glm::vec3 a1 = glm::vec3(MA * glm::vec4(
+                vertsA[i1 * 3 + 0],
+                vertsA[i1 * 3 + 1],
+                vertsA[i1 * 3 + 2], 1.0f));
+
+            glm::vec3 a2 = glm::vec3(MA * glm::vec4(
+                vertsA[i2 * 3 + 0],
+                vertsA[i2 * 3 + 1],
+                vertsA[i2 * 3 + 2], 1.0f));
+
+            glm::vec3 triNormal = glm::normalize(glm::cross(a1 - a0, a2 - a0));
+            glm::vec3 closest = ClosestPointOnTriangle(pv, a0, a1, a2);
+            glm::vec3 diff = pv - closest;
+            float dist = glm::length(diff);
+
+            if (dist <= contactThreshold)
+            {
+                if (glm::dot(diff, triNormal) < 0.0f)
+                    triNormal = -triNormal;
+
+                Contact c;
+                c.A = A;
+                c.B = B;
+                c.point = 0.5f * (pv + closest);
+                // For B->A pass we want normal from A->B, so flip
+                c.normal = -triNormal;
+                c.penetration = contactThreshold - dist;
+                result.push_back(c);
+            }
+        }
+    }
+
     return result;
 }
 
@@ -206,12 +285,15 @@ void ApplyImpulse(PhysicalModel& pm, const glm::vec3& impulse, const glm::vec3& 
     pm.physics.velocity += impulse * invM;
 
     // angular: DELTAL = r x impulse
-    glm::vec3 r = contactPointWorld - (pm.instance->position + pm.physics.centerOfGravity);
+    // compute center-of-gravity in world space from stored local centroid
+    glm::vec3 centerWorld = ComputeCenterWorld(*pm.instance, pm.physics.centerOfGravity);
+    glm::vec3 r = contactPointWorld - centerWorld;
     pm.physics.angularMomentum += glm::cross(r, impulse);
 
     // update angular velocity from L: need current world-space inverse inertia
     // (inertia tensor world must be up-to-date)
-    glm::mat3 R = glm::mat3_cast(glm::quat(pm.instance->rotation));
+    glm::quat q = glm::quat(glm::radians(pm.instance->rotation));
+    glm::mat3 R = glm::mat3_cast(q);
     pm.physics.inertiaTensorWorld = R * pm.physics.inertiaTensorLocal * glm::transpose(R);
     pm.physics.inertiaTensorWorldInv = glm::inverse(pm.physics.inertiaTensorWorld + glm::mat3(1e-8f));
 
@@ -227,14 +309,19 @@ void ResolveContactImpulse(const Contact& c) {
     // If either static, handle correctly
     float invMassA = (A->physics.isStatic || A->physics.mass <= 0.0f) ? 0.0f : 1.0f / A->physics.mass;
     float invMassB = (B->physics.isStatic || B->physics.mass <= 0.0f) ? 0.0f : 1.0f / B->physics.mass;
+    float invMassSum = invMassA + invMassB;
+
+    // compute world-space COM positions
+    glm::vec3 centerA = ComputeCenterWorld(*A->instance, A->physics.centerOfGravity);
+    glm::vec3 centerB = ComputeCenterWorld(*B->instance, B->physics.centerOfGravity);
 
     // relative position from COM to contact
-    glm::vec3 rA = c.point - (A->instance->position + A->physics.centerOfGravity);
-    glm::vec3 rB = c.point - (B->instance->position + B->physics.centerOfGravity);
+    glm::vec3 rA = c.point - centerA;
+    glm::vec3 rB = c.point - centerB;
 
     // update world inertia inverse for both (ensure not singular)
-    glm::mat3 RA = glm::mat3_cast(glm::quat(A->instance->rotation));
-    glm::mat3 RB = glm::mat3_cast(glm::quat(B->instance->rotation));
+    glm::mat3 RA = glm::mat3_cast(glm::quat(glm::radians(A->instance->rotation)));
+    glm::mat3 RB = glm::mat3_cast(glm::quat(glm::radians(B->instance->rotation)));
     A->physics.inertiaTensorWorld = RA * A->physics.inertiaTensorLocal * glm::transpose(RA);
     B->physics.inertiaTensorWorld = RB * B->physics.inertiaTensorLocal * glm::transpose(RB);
     A->physics.inertiaTensorWorldInv = glm::inverse(A->physics.inertiaTensorWorld + glm::mat3(1e-8f));
@@ -269,10 +356,12 @@ void ResolveContactImpulse(const Contact& c) {
     // Positional correction (baumgarte) to avoid sinking
     const float k_slop = 0.01f;
     const float percent = 0.2f;
-    float correction = std::max(c.penetration - k_slop, 0.0f) / (invMassA + invMassB) * percent;
-    glm::vec3 correctionVec = correction * n;
-    if (!A->physics.isStatic) A->instance->position += correctionVec * invMassA;
-    if (!B->physics.isStatic) B->instance->position -= correctionVec * invMassB;
+    if (invMassSum > 0.0f && c.penetration > k_slop) {
+        float correction = (c.penetration - k_slop) / invMassSum * percent;
+        glm::vec3 correctionVec = correction * n;
+        if (!A->physics.isStatic) A->instance->position += correctionVec * invMassA;
+        if (!B->physics.isStatic) B->instance->position -= correctionVec * invMassB;
+    }
 
     // Apply normal impulse
     glm::vec3 impulse = j * n;
@@ -280,14 +369,12 @@ void ResolveContactImpulse(const Contact& c) {
     if (!B->physics.isStatic) ApplyImpulse(*B, -impulse, c.point);
 
     // Friction impulse (Coulomb)
-    // tangent
     glm::vec3 vt = rv - velAlongNormal * n;
     float vtLen = glm::length(vt);
     glm::vec3 tangent = (vtLen > 1e-6f) ? (vt / vtLen) : glm::vec3(0.0f);
 
     float mu = std::sqrt(A->physics.material.friction * B->physics.material.friction); // approximate
-    // magnitude of friction impulse
-    // compute denominator in tangent direction similarly:
+
     glm::vec3 rtA = glm::cross(rA, tangent);
     glm::vec3 rtB = glm::cross(rB, tangent);
     float denomT = invMassA + invMassB +
@@ -297,7 +384,8 @@ void ResolveContactImpulse(const Contact& c) {
     if (denomT > 1e-8f) {
         jt = -glm::dot(rv, tangent) / denomT;
         // clamp friction
-        if (std::abs(jt) > j * mu) jt = glm::sign(jt) * j * mu;
+        float maxF = std::abs(j) * mu;
+        if (std::abs(jt) > maxF) jt = glm::sign(jt) * maxF;
     }
     glm::vec3 frictionImpulse = jt * tangent;
     if (!A->physics.isStatic) ApplyImpulse(*A, frictionImpulse, c.point);
@@ -310,6 +398,7 @@ void ResolveContactImpulse(const Contact& c) {
 
 // Compute kinetic energy of a physical model (trans + rot)
 float ComputeKineticEnergy(const PhysicalModel& pm) {
+    if (pm.physics.isStatic) return 0.0f;
     float trans = 0.5f * pm.physics.mass * glm::dot(pm.physics.velocity, pm.physics.velocity);
 
     // rotational energy: 0.5 * w^T * I * w
@@ -431,7 +520,7 @@ static std::pair<double, glm::dvec3> ComputeVolumeAndCentroid(const ModelInstanc
 void RegisterPhysicalModel(ModelInstance& instance, const Material& mat, bool isStatic) {
     // Store pointer to instance (avoid dangling reference)
 
-        // check already registered (avoid duplicates)
+    // check already registered (avoid duplicates)
     for (auto& pm : physicalModels) {
         if (pm.instance == &instance) {
             std::cerr << "[RegisterPhysicalModel] Warning: instance already registered, ignoring.\n";
@@ -453,7 +542,7 @@ void RegisterPhysicalModel(ModelInstance& instance, const Material& mat, bool is
     }
 
     double absVolume = std::abs(volume_m3);
-    // sensible fallback volume if mesh failed (not 1e-6 m^3 unless you want that)
+    // sensible fallback volume if mesh failed
     const double fallbackVolume = 1e-3; // 1 liter ~ 0.001 m^3 => heavier fallback
     if (absVolume < 1e-12) absVolume = fallbackVolume;
 
@@ -465,11 +554,13 @@ void RegisterPhysicalModel(ModelInstance& instance, const Material& mat, bool is
 
     PhysicalEntity phys;
     phys.instance = instance; // store pointer to the real instance
-    phys.mass = isStatic ? std::numeric_limits<float>::infinity() : mass;
+    // avoid infinite mass: static objects flagged with isStatic and mass not used (invMass treated as 0)
+    phys.mass = isStatic ? 1e12f : mass;
     phys.material = mat;
     phys.velocity = glm::vec3(0.0f);
     phys.angularVelocity = glm::vec3(0.0f);
-    phys.centerOfGravity = glm::vec3(centroid_d); // use computed centroid
+    // store centroid in local coordinates (mesh-space). Use this consistently and compute world when needed.
+    phys.centerOfGravity = glm::vec3(centroid_d);
     phys.volumeCM3 = (float)(absVolume * 1e6);    // m^3 -> cm^3
     phys.isStatic = isStatic;
 
@@ -499,11 +590,14 @@ void RegisterPhysicalModel(ModelInstance& instance, const Material& mat, bool is
     physicalModels.push_back({ &instance, phys });
 
 #ifdef Debug
+    // show centroid in local and world
+    glm::vec3 centerWorld = ComputeCenterWorld(instance, glm::vec3(centroid_d));
     std::cout << std::fixed << std::setprecision(6)
         << "[Register] model at " << &instance
         << " | vol(m^3)=" << absVolume
         << " | vol(cm^3)=" << (absVolume * 1e6)
-        << " | centroid=(" << centroid_d.x << "," << centroid_d.y << "," << centroid_d.z << ")"
+        << " | centroid_local=(" << centroid_d.x << "," << centroid_d.y << "," << centroid_d.z << ")"
+        << " | centroid_world=(" << centerWorld.x << "," << centerWorld.y << "," << centerWorld.z << ")"
         << " | mass(kg)=" << phys.mass
         << " | isStatic=" << (isStatic ? "Yes" : "No")
         << "\n";
@@ -523,7 +617,8 @@ void UpdatePhysics(float deltaTime) {
 
         // apply accumulated forces (F = m a)
         if (glm::length(pm.physics.forces) > 0.0f) {
-            pm.physics.velocity += (pm.physics.forces / pm.physics.mass) * deltaTime;
+            if (pm.physics.mass > 0.0f)
+                pm.physics.velocity += (pm.physics.forces / pm.physics.mass) * deltaTime;
             pm.physics.forces = glm::vec3(0.0f);
         }
 
@@ -541,7 +636,7 @@ void UpdatePhysics(float deltaTime) {
         for (auto& c : cs) allContacts.push_back(c);
     }
 
-    // iterate resolving contacts (simple 10 iterations)
+    // iterate resolving contacts (simple 8 iterations)
     int iters = 8;
     for (int it = 0; it < iters; ++it) {
         for (auto& c : allContacts) ResolveContactImpulse(c);
@@ -552,7 +647,7 @@ void UpdatePhysics(float deltaTime) {
         if (!pm.instance || pm.physics.isStatic) continue;
 
         // compute world inertia
-        glm::quat q = glm::quat(pm.instance->rotation);
+        glm::quat q = glm::quat(glm::radians(pm.instance->rotation));
         glm::mat3 R = glm::mat3_cast(q);
         pm.physics.inertiaTensorWorld = R * pm.physics.inertiaTensorLocal * glm::transpose(R);
         // invert (safe)
@@ -570,7 +665,7 @@ void UpdatePhysics(float deltaTime) {
         glm::quat wq(0.0f, pm.physics.angularVelocity.x, pm.physics.angularVelocity.y, pm.physics.angularVelocity.z);
         glm::quat qNew = q + 0.5f * wq * q * (float)deltaTime;
         qNew = glm::normalize(qNew);
-        pm.instance->rotation = glm::eulerAngles(qNew);
+        pm.instance->rotation = glm::degrees(glm::eulerAngles(qNew));
     }
 
     // 4) integrate linear velocities -> positions (semi-implicit)
@@ -590,11 +685,13 @@ void UpdatePhysics(float deltaTime) {
         const auto& T = *pm.instance;   // ModelInstance transform
 
         float KE = ComputeKineticEnergy(pm);
+        glm::vec3 centerWorld = ComputeCenterWorld(T, P.centerOfGravity);
 
         std::cout
             << "[Object " << index << "]\n"
             << "  Pos:      (" << T.position.x << ", " << T.position.y << ", " << T.position.z << ")\n"
             << "  Rot:      (" << T.rotation.x << ", " << T.rotation.y << ", " << T.rotation.z << ")\n"
+            << "  COM_World:(" << centerWorld.x << ", " << centerWorld.y << ", " << centerWorld.z << ")\n"
             << "  Vel:      (" << P.velocity.x << ", " << P.velocity.y << ", " << P.velocity.z << ")\n"
             << "  Ang Vel:  (" << P.angularVelocity.x << ", " << P.angularVelocity.y << ", " << P.angularVelocity.z << ")\n"
             << "  Mass:      " << P.mass << "\n"
@@ -614,8 +711,10 @@ void PrintPhysicsState() {
     int i = 0;
     for (auto& obj : physicalModels) {
         if (!obj.instance) continue;
+        glm::vec3 centerWorld = ComputeCenterWorld(*obj.instance, obj.physics.centerOfGravity);
         std::cout << "Object[" << i++ << "] mass=" << obj.physics.mass
             << " pos=(" << obj.instance->position.x << "," << obj.instance->position.y << "," << obj.instance->position.z << ")"
+            << " com=(" << centerWorld.x << "," << centerWorld.y << "," << centerWorld.z << ")"
             << " vel=(" << obj.physics.velocity.x << "," << obj.physics.velocity.y << "," << obj.physics.velocity.z << ")"
             << " angVel=(" << obj.physics.angularVelocity.x << "," << obj.physics.angularVelocity.y << "," << obj.physics.angularVelocity.z << ")\n";
     }
@@ -654,15 +753,18 @@ PhysicalModel* RaycastModels(const glm::vec3& rayOrigin,
 
         glm::mat4 modelMat = ComputeModelMatrix(obj.physics.instance);
 
-        for (size_t i = 0; i < indices.size(); i += 3) {
-            size_t i0 = indices[i] * 3;
-            size_t i1 = indices[i + 1] * 3;
-            size_t i2 = indices[i + 2] * 3;
-            if (i0 + 2 >= verts.size() || i1 + 2 >= verts.size() || i2 + 2 >= verts.size()) continue;
+        for (size_t i = 0; i + 2 < indices.size(); i += 3) {
+            uint32_t a = indices[i + 0];
+            uint32_t b = indices[i + 1];
+            uint32_t c = indices[i + 2];
+            // bounds check
+            if ((size_t)a * 3 + 2 >= verts.size() ||
+                (size_t)b * 3 + 2 >= verts.size() ||
+                (size_t)c * 3 + 2 >= verts.size()) continue;
 
-            glm::vec3 v0 = glm::vec3(modelMat * glm::vec4(verts[i0 + 0], verts[i0 + 1], verts[i0 + 2], 1.0f));
-            glm::vec3 v1 = glm::vec3(modelMat * glm::vec4(verts[i1 + 0], verts[i1 + 1], verts[i1 + 2], 1.0f));
-            glm::vec3 v2 = glm::vec3(modelMat * glm::vec4(verts[i2 + 0], verts[i2 + 1], verts[i2 + 2], 1.0f));
+            glm::vec3 v0 = glm::vec3(modelMat * glm::vec4(verts[a * 3 + 0], verts[a * 3 + 1], verts[a * 3 + 2], 1.0f));
+            glm::vec3 v1 = glm::vec3(modelMat * glm::vec4(verts[b * 3 + 0], verts[b * 3 + 1], verts[b * 3 + 2], 1.0f));
+            glm::vec3 v2 = glm::vec3(modelMat * glm::vec4(verts[c * 3 + 0], verts[c * 3 + 1], verts[c * 3 + 2], 1.0f));
 
             float dist;
             if (RayIntersectsTriangle(rayOrigin, rayDir, v0, v1, v2, dist)) {
@@ -705,6 +807,7 @@ void OnRightClickPressed(const Camera& cam, double mouseX, double mouseY, int wi
     if (hitModel) {
         draggedModel = hitModel;
         grabWorldPoint = hit;
+        // store local offset relative to instance position (not COM)
         grabLocalOffset = hit - hitModel->instance->position;
         dragging = true;
 
@@ -715,8 +818,7 @@ void OnRightClickPressed(const Camera& cam, double mouseX, double mouseY, int wi
 #ifdef Debug
         std::cout << "[Physics] Grabbed object at "
             << "Pos(" << hitModel->instance->position.x << ", "
-            << hitModel->instance->position.y << ", "
-            << hitModel->instance->position.z << ") "
+            << hitModel->instance->position.y << ", " << hitModel->instance->position.z << ") "
             << " | Hit (" << hit.x << ", " << hit.y << ", " << hit.z << ")\n";
 #endif
     }
@@ -758,6 +860,7 @@ void UpdateDrag(const Camera& cam, double mouseX, double mouseY, int windowWidth
     glm::vec3 newGrabPos = rayOrigin + rayDir * grabDist;
     glm::vec3 newObjectPos = newGrabPos - grabLocalOffset;
 
-    float massFactor = 1000 / std::sqrt(draggedModel->physics.mass); // tweak factor as needed
-    draggedModel->instance->position = glm::mix(draggedModel->instance->position, newObjectPos, 0.2f * massFactor);
+    float massFactor = 1.0f;
+    if (draggedModel->physics.mass > 0.0f) massFactor = 1000.0f / std::sqrt(draggedModel->physics.mass); // tweak factor as needed
+    draggedModel->instance->position = glm::mix(draggedModel->instance->position, newObjectPos, glm::clamp(0.2f * massFactor, 0.01f, 1.0f));
 }

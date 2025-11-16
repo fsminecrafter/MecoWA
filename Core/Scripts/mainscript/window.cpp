@@ -120,7 +120,7 @@ int main(void)
     // Create models using the new engine API
     OBJData monkeOBJ;
     CreateObject(R"(Core\Resources\3dmodels\monke.obj)", monkeOBJ,
-        glm::vec3(0.0f, 20.0f, 0.0f), glm::vec3(0.0f), glm::vec3(1.0f));
+        glm::vec3(0.0f, 80.0f, 0.0f), glm::vec3(0.0f), glm::vec3(1.0f));
 
     OBJData monke2OBJ;
     CreateObject(R"(Core\Resources\3dmodels\monke.obj)", monke2OBJ,
