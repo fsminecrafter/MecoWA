@@ -510,17 +510,16 @@ void RegisterPhysicalModel(ModelInstance& instance, const Material& mat, bool is
     }
 
     auto [volume_m3, centroid_d] = ComputeVolumeAndCentroid(instance);
-
     double absVolume = std::max(std::abs(volume_m3), 1e-6); // avoid zero
     float mass = isStatic ? 0.0f : std::max((float)(absVolume * mat.density), 0.01f);
 
-    // find lowest vertex
+    // find lowest vertex in model space
     glm::vec3 minVert(std::numeric_limits<float>::infinity());
     for (size_t i = 0; i + 2 < instance.model.vertexCoords.size(); i += 3)
         minVert = glm::min(minVert, glm::vec3(instance.model.vertexCoords[i], instance.model.vertexCoords[i + 1], instance.model.vertexCoords[i + 2]));
 
-    instance.position.y -= minVert.y; // ensure bottom sits at Y=0
-    const float contactThreshold = 0.001f;
+    // adjust initial position so bottom sits at current y
+    instance.position.y = float(instance.position.y) + (-float(minVert.y));
 
     PhysicalEntity phys;
     phys.instance = instance;
@@ -558,110 +557,8 @@ void RegisterPhysicalModel(ModelInstance& instance, const Material& mat, bool is
 #endif
 }
 
-
-void UpdatePhysics(float deltaTime) {
-    if (deltaTime <= 0.0f) return;
-
-    // 1) integrate forces -> linear velocity (explicit)
-    for (auto& pm : physicalModels) {
-        if (!pm.instance || pm.physics.isStatic) continue;
-
-        // gravity
-        glm::vec3 gravity = glm::vec3(0.0f, -9.81f, 0.0f);
-        pm.physics.velocity += gravity * deltaTime;
-
-        // apply accumulated forces (F = m a)
-        if (glm::length(pm.physics.forces) > 0.0f) {
-            if (pm.physics.mass > 0.0f)
-                pm.physics.velocity += (pm.physics.forces / pm.physics.mass) * deltaTime;
-            pm.physics.forces = glm::vec3(0.0f);
-        }
-
-        // accumulate torque already done externally via pm.physics.torque
-    }
-
-    // 2) collision detection + resolution
-    // broadphase
-    auto pairs = BroadphaseGeneratePairs();
-
-    // generate contacts and solve immediately (basic iterative)
-    std::vector<Contact> allContacts;
-    for (auto& p : pairs) {
-        auto cs = NarrowphaseGenerateContacts(p.A, p.B);
-        for (auto& c : cs) allContacts.push_back(c);
-    }
-
-    // iterate resolving contacts (simple 8 iterations)
-    int iters = 8;
-    for (int it = 0; it < iters; ++it) {
-        for (auto& c : allContacts) ResolveContactImpulse(c);
-    }
-
-    // 3) rotational dynamics: update inertia world, integrate angular momentum -> orientation
-    for (auto& pm : physicalModels) {
-        if (!pm.instance || pm.physics.isStatic) continue;
-
-        // compute world inertia
-        glm::quat q = glm::quat(glm::radians(pm.instance->rotation));
-        glm::mat3 R = glm::mat3_cast(q);
-        pm.physics.inertiaTensorWorld = R * pm.physics.inertiaTensorLocal * glm::transpose(R);
-        // invert (safe)
-        pm.physics.inertiaTensorWorldInv = glm::inverse(pm.physics.inertiaTensorWorld + glm::mat3(1e-8f));
-
-        // angular momentum update (torque is in world space)
-        pm.physics.angularMomentum += pm.physics.torque * deltaTime;
-        pm.physics.torque = glm::vec3(0.0f);
-
-        // gyroscopic term and compute angular velocity from L: w = I^-1 * L
-        pm.physics.angularVelocity = pm.physics.inertiaTensorWorldInv * pm.physics.angularMomentum;
-
-        // integrate orientation using semi-implicit quaternion integration
-        // dq/dt = 0.5 * q * [0, w]
-        glm::quat wq(0.0f, pm.physics.angularVelocity.x, pm.physics.angularVelocity.y, pm.physics.angularVelocity.z);
-        glm::quat qNew = q + 0.5f * wq * q * (float)deltaTime;
-        qNew = glm::normalize(qNew);
-        pm.instance->rotation = glm::degrees(glm::eulerAngles(qNew));
-    }
-
-    // 4) integrate linear velocities -> positions (semi-implicit)
-    for (auto& pm : physicalModels) {
-        if (!pm.instance || pm.physics.isStatic) continue;
-
-        pm.instance->position += pm.physics.velocity * deltaTime;
-    }
-
-#ifdef Debug
-    std::cout << "\n[Physics Debug] ==============================\n";
-
-    int index = 0;
-    for (auto& pm : physicalModels)
-    {
-        const auto& P = pm.physics;     // shortcut
-        const auto& T = *pm.instance;   // ModelInstance transform
-
-        float KE = ComputeKineticEnergy(pm);
-        glm::vec3 centerWorld = ComputeCenterWorld(T, P.centerOfGravity);
-
-        std::cout
-            << "[Object " << index << "]\n"
-            << "  Pos:      (" << T.position.x << ", " << T.position.y << ", " << T.position.z << ")\n"
-            << "  Rot:      (" << T.rotation.x << ", " << T.rotation.y << ", " << T.rotation.z << ")\n"
-            << "  COM_World:(" << centerWorld.x << ", " << centerWorld.y << ", " << centerWorld.z << ")\n"
-            << "  Vel:      (" << P.velocity.x << ", " << P.velocity.y << ", " << P.velocity.z << ")\n"
-            << "  Ang Vel:  (" << P.angularVelocity.x << ", " << P.angularVelocity.y << ", " << P.angularVelocity.z << ")\n"
-            << "  Mass:      " << P.mass << "\n"
-            << "  Kinetic E: " << KE << "\n\n";
-
-        index++;
-    }
-
-    std::cout << "==============================================\n";
-#endif
-}
-
 // Pretty-print
 void PrintPhysicsState() {
-#ifdef Debug
     std::cout << "====== Physics Debug Info ======" << std::endl;
     int i = 0;
     for (auto& obj : physicalModels) {
@@ -674,9 +571,91 @@ void PrintPhysicsState() {
             << " angVel=(" << obj.physics.angularVelocity.x << "," << obj.physics.angularVelocity.y << "," << obj.physics.angularVelocity.z << ")\n";
     }
     std::cout << "================================" << std::endl;
-#endif
 }
 
+
+void UpdatePhysics(float deltaTime) {
+    if (deltaTime <= 0.0f) return;
+
+    const glm::vec3 gravity(0.0f, -9.81f, 0.0f);
+
+    // --- 1) apply accumulated forces (F = m a) ---
+    for (auto& pm : physicalModels) {
+        if (!pm.instance || pm.physics.isStatic) continue;
+
+        if (glm::length(pm.physics.forces) > 0.0f && pm.physics.mass > 0.0f) {
+            pm.physics.velocity += (pm.physics.forces / pm.physics.mass) * deltaTime;
+            pm.physics.forces = glm::vec3(0.0f);
+        }
+        if (glm::length(pm.physics.torque) > 0.0f) {
+            pm.physics.angularMomentum += pm.physics.torque * deltaTime;
+            pm.physics.torque = glm::vec3(0.0f);
+        }
+    }
+
+    // --- 2) collision detection + iterative resolution ---
+    auto pairs = BroadphaseGeneratePairs();
+    std::vector<Contact> allContacts;
+    for (auto& p : pairs) {
+        auto cs = NarrowphaseGenerateContacts(p.A, p.B);
+        allContacts.insert(allContacts.end(), cs.begin(), cs.end());
+    }
+
+    const int iterations = 8;
+    const float k_slop = 0.01f;
+    const float percent = 0.2f;
+    const float maxCorrection = 0.02f; // limit per-frame correction
+
+    for (int it = 0; it < iterations; ++it) {
+        for (auto& c : allContacts) {
+            ResolveContactImpulse(c);
+
+            // clamp positional correction to avoid huge jumps
+            float invMassA = (!c.A->physics.isStatic && c.A->physics.mass > 0.0f) ? 1.0f / c.A->physics.mass : 0.0f;
+            float invMassB = (!c.B->physics.isStatic && c.B->physics.mass > 0.0f) ? 1.0f / c.B->physics.mass : 0.0f;
+            float invMassSum = invMassA + invMassB;
+            if (c.penetration > k_slop && invMassSum > 0.0f) {
+                float correction = glm::clamp((c.penetration - k_slop) / invMassSum * percent, -maxCorrection, maxCorrection);
+                if (!c.A->physics.isStatic) c.A->instance->position += correction * c.normal * invMassA;
+                if (!c.B->physics.isStatic) c.B->instance->position -= correction * c.normal * invMassB;
+            }
+        }
+    }
+
+    // --- 3) apply gravity and integrate velocities ---
+    for (auto& pm : physicalModels) {
+        if (!pm.instance || pm.physics.isStatic) continue;
+
+        // apply gravity
+        pm.physics.velocity += gravity * deltaTime;
+
+        // semi-implicit position integration
+        pm.instance->position += pm.physics.velocity * deltaTime;
+    }
+
+    // --- 4) rotational dynamics ---
+    for (auto& pm : physicalModels) {
+        if (!pm.instance || pm.physics.isStatic) continue;
+
+        glm::quat q = glm::quat(glm::radians(pm.instance->rotation));
+        glm::mat3 R = glm::mat3_cast(q);
+
+        pm.physics.inertiaTensorWorld = R * pm.physics.inertiaTensorLocal * glm::transpose(R);
+        glm::mat3 eps(0.0f); eps[0][0] = eps[1][1] = eps[2][2] = 1e-8f; // diagonal only
+        pm.physics.inertiaTensorWorldInv = glm::inverse(pm.physics.inertiaTensorWorld + eps);
+
+        pm.physics.angularVelocity = pm.physics.inertiaTensorWorldInv * pm.physics.angularMomentum;
+
+        // integrate orientation
+        glm::quat wq(0.0f, pm.physics.angularVelocity.x, pm.physics.angularVelocity.y, pm.physics.angularVelocity.z);
+        glm::quat qNew = glm::normalize(q + 0.5f * wq * q * deltaTime);
+        pm.instance->rotation = glm::degrees(glm::eulerAngles(qNew));
+    }
+
+#ifdef Debug
+    PrintPhysicsState();
+#endif
+}
 static bool dragging = false;
 static PhysicalModel* draggedModel = nullptr;
 static glm::vec3 grabLocalOffset;
