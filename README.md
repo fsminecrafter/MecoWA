@@ -7,7 +7,7 @@ It is still in very early development, so don't expect much yet.
 The goal of this project is to create a realistic mechanical simulator that is fun and easy to use.
 
 #### Now using Joltphysics
-As programming an advanced physics engine is fun but is extremly hard to do right.
+As programming an advanced physics engine is fun but is extremly hard to do right.   
 Joltphysics git [https://github.com/jrouwe/JoltPhysics]
 
 ###### Definitley inspired by BeamNG.Drive [https://store.steampowered.com/app/284160/BeamNGdrive/ ]
