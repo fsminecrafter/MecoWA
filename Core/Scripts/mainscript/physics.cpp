@@ -1,3 +1,5 @@
+// About to be depreceated
+
 #define GLM_ENABLE_EXPERIMENTAL
 #include "physics.h"
 #include <glm/gtx/rotate_vector.hpp>
@@ -657,7 +659,8 @@ void UpdatePhysics(float deltaTime) {
                     c.penetration = 0.0f; // small offset already applied
                     ResolveContactImpulse(c);
                 }
-            } else {
+            }
+            else {
                 // normal semi-implicit integration if no CCD hit
                 pm.instance->position += pm.physics.velocity * subDelta;
             }
