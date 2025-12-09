@@ -24,3 +24,10 @@ Joltphysics git [https://github.com/jrouwe/JoltPhysics]
 - No functionality yet...
 - No software yet...
 - nothing
+
+### Installation
+
+To install download the latest realease or the source code. Then unzip it with 7zip or similar, open the folder and run the MecoWA.exe
+If you download directly some changes might be needed.
+
+Steps to run the Source code of MecoWA
