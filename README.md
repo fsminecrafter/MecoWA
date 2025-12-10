@@ -30,4 +30,12 @@ Joltphysics git [https://github.com/jrouwe/JoltPhysics]
 To install download the latest realease or the source code. Then unzip it with 7zip or similar, open the folder and run the MecoWA.exe
 If you download directly some changes might be needed.
 
-Steps to run the Source code of MecoWA
+Steps to run the Source code of MecoWA.
+  1. Download the Source code.
+  2. Unzip the Source code.
+  3. Download or run VS2022.
+  4. Open the MecoWA Project file.
+  5. Build it with Visual studio.
+###### To Run without studio after building
+  6. Move the Compiled executable typically named MecoWA.exe thats found in the Build dir. to the Root of the project, above /Core .
+  7. Run the executable if it doesnt work its either something with the code or its the wrong directory.
