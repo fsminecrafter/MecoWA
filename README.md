@@ -42,6 +42,14 @@ Steps to run the Source code of MecoWA.
   6. Move the Compiled executable typically named MecoWA.exe thats found in the Build dir. to the Root of the project, above /Core .
   7. Run the executable if it doesnt work its either something with the code or its the wrong directory.
 
-### DIY Physics update
+### DIY Physics upgrade
 
-If you for some reason want to update the "JoltPhysic" Engine, Firstly dowload the dependencies.
+If you for some reason want to update the `JoltPhysics` Engine, Firstly dowload the dependencies.
+- Dependencies
+  - MecoWA (source code)
+  - Joltphysics 
+  - VS2022
+  - CMAKE 3.20+
+Then continue to build Joltphysics which is explained in their github page.
+When done proceed to change out any files that are from the old Joltphysics installation.
+Done! 👍
