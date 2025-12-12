@@ -16,20 +16,29 @@ void Physics_AddDynamic_Box(ModelInstance& inst)
 {
     auto* bi = &gPhysics->GetBodyInterface();
 
-    auto shape = JPH::BoxShape(JPH::Vec3(inst.scale.x * .5f, inst.scale.y * .5f, inst.scale.z * .5f));
+    JPH::RefConst<JPH::Shape> shape = new JPH::BoxShape(
+        JPH::Vec3(inst.scale.x * 0.5f, inst.scale.y * 0.5f, inst.scale.z * 0.5f)
+    );
 
     JPH::BodyCreationSettings bcs(
-        &shape,
+        shape,
         JPH::Vec3(inst.position.x, inst.position.y, inst.position.z),
         JPH::Quat::sIdentity(),
         JPH::EMotionType::Dynamic,
-        0);
+        0 // object layer
+    );
+
+    auto mp = shape->GetMassProperties();
+    mp.ScaleToMass(inst.mass);
+    bcs.mOverrideMassProperties = JPH::EOverrideMassProperties::MassAndInertiaProvided;
+    bcs.mMassPropertiesOverride = mp;
 
     auto body = bi->CreateBody(bcs);
     bi->AddBody(body->GetID(), JPH::EActivation::Activate);
 
     bodies.push_back({ &inst, body->GetID() });
 }
+
 
 
 
