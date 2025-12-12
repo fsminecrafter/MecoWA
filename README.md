@@ -10,9 +10,9 @@ The goal of this project is to create a realistic mechanical simulator that is f
 
 #### Now using Joltphysics
 As programming an advanced physics engine is fun but is extremly hard to do right.   
-Joltphysics git [https://github.com/jrouwe/JoltPhysics]
+Joltphysics git (https://github.com/jrouwe/JoltPhysics)
 
-###### Definitley inspired by BeamNG.Drive [https://store.steampowered.com/app/284160/BeamNGdrive/ ]
+###### Definitley inspired by BeamNG.Drive [BeamNG.Drive](https://store.steampowered.com/app/284160/BeamNGdrive/ )
 
 ### Features
 
@@ -41,3 +41,7 @@ Steps to run the Source code of MecoWA.
 ###### To Run without studio after building
   6. Move the Compiled executable typically named MecoWA.exe thats found in the Build dir. to the Root of the project, above /Core .
   7. Run the executable if it doesnt work its either something with the code or its the wrong directory.
+
+### DIY Physics update
+
+If you for some reason want to update the "JoltPhysic" Engine, Firstly dowload the dependencies.
