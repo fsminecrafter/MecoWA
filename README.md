@@ -45,11 +45,15 @@ Steps to run the Source code of MecoWA.
 ### DIY Physics upgrade
 
 If you for some reason want to update the `JoltPhysics` Engine, Firstly dowload the dependencies.
-- Dependencies
-  - MecoWA (source code)
-  - Joltphysics 
-  - VS2022
-  - CMAKE 3.20+
+<details>
+<summary>Dependencies</summary>
+
+- MecoWA `Source Code`
+- Joltphysics
+- Cmake 3.2+
+- VS2022
+
+</details>
 Then continue to build Joltphysics which is explained in their github page.
 When done proceed to change out any files that are from the old Joltphysics installation.
 Done! 👍
