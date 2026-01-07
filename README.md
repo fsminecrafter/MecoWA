@@ -2,7 +2,7 @@
 
 ### Introduction
 
-#### MecoWA v0.07
+#### MecoWA v0.071
 
 MecoWA is a mechanical simulator made in C++ using OpenGL and GLFW.
 It is still in very early development, so don't expect much yet.

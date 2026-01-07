@@ -24,7 +24,7 @@ float airDensity = 1.225f;     // kg/m3 (Earth, sea level)
 
 int windowWidth = 640;
 int windowHeight = 480;
-std::string version = "0.06";
+std::string version = "0.071";
 
 void errorpopup(int code)
 {
