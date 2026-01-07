@@ -5,7 +5,7 @@
 #include <random>
 #include <limits>
 #include <ctime>
-#include <glm/glm.hpp>
+#include <glm/glm/glm.hpp>
 #include <unordered_map>
 #include <cassert>
 

@@ -1,4 +1,4 @@
-#include <glm/glm.hpp>
+#include <glm/glm/glm.hpp>
 #include "ComputeInertiaTensor.h"
 #include <vector>
 #include <cmath>

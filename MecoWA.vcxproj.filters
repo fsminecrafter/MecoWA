@@ -45,13 +45,13 @@
     <ClCompile Include="Core\Resources\glad\src\glad.c">
       <Filter>Resource Files</Filter>
     </ClCompile>
-    <ClCompile Include="Core\Scripts\mainscript\Jolt\jolt_init.cpp">
+    <ClCompile Include="Core\Scripts\mainscript\jolt_init.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Core\Scripts\mainscript\Jolt\jolt_shape_cache.cpp">
+    <ClCompile Include="Core\Scripts\mainscript\jolt_shape_cache.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Core\Scripts\mainscript\Jolt\jolt_world.cpp">
+    <ClCompile Include="Core\Scripts\mainscript\jolt_world.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -95,14 +95,17 @@
     <ClInclude Include="Core\Scripts\mainscript\ComputeInertiaTensor.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Core\Scripts\mainscript\Jolt\jolt_init.h">
-      <Filter>Source Files</Filter>
+    <ClInclude Include="Core\Scripts\mainscript\jolt_init.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Core\Scripts\mainscript\Jolt\jolt_shape_cache.h">
-      <Filter>Source Files</Filter>
+    <ClInclude Include="Core\Scripts\mainscript\jolt_shape_cache.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Core\Scripts\mainscript\Jolt\jolt_world.h">
-      <Filter>Source Files</Filter>
+    <ClInclude Include="Core\Scripts\mainscript\jolt_world.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Scripts\mainscript\jolt_layers.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

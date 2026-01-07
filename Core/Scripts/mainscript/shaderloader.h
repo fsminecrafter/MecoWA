@@ -1,11 +1,11 @@
 #pragma once
-#include <glad/glad.h>
-#include <glm/glm.hpp>
+#include <glad/include/glad/glad.h>
+#include <glm/glm/glm.hpp>
 #include <string>
 #include <fstream>
 #include <sstream>
 #include <iostream>
-#include <glm/gtc/type_ptr.hpp>
+#include <glm/glm/gtc/type_ptr.hpp>
 
 
 class Shader {

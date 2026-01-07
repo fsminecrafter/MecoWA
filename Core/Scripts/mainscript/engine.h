@@ -1,9 +1,9 @@
 #pragma once
-#include <glm/glm.hpp>
+#include <glm/glm/glm.hpp>
 #include <vector>
 #include "objloader.h"
 #include "shaderloader.h"
-#include <glad/glad.h>
+#include <glad/include/glad/glad.h>
 
 // Represents a loaded model instance in the scene
 struct ModelInstance {

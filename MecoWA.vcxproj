@@ -91,10 +91,10 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <PreprocessorDefinitions>_DEBUG;_WINDOWS;JPH_SHARED_LIBRARY
+      <PreprocessorDefinitions>_DEBUG;_WINDOWS
 ;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <WarningLevel>Level3</WarningLevel>
-      <AdditionalIncludeDirectories>D:\Projects\MecoWA\Core\SaveData;D:\Projects\MecoWA\Core\Data;D:\Projects\MecoWA\Core\Settings;D:\Projects\MecoWA\Core\Sounds;D:\Projects\MecoWA\Core\Temp;D:\Projects\MecoWA\Core\Resources;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)Core\Resources;$(ProjectDir)Core\SaveData;$(ProjectDir)Core\Data;$(ProjectDir)Core\Settings;$(ProjectDir)Core\Sounds;$(ProjectDir)Core\Temp;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalModuleDependencies>%(AdditionalModuleDependencies)</AdditionalModuleDependencies>
       <MultiProcessorCompilation>false</MultiProcessorCompilation>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
@@ -103,9 +103,10 @@
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
-      <AdditionalLibraryDirectories>D:\Projects\MecoWA\Core\Resources\glm;D:\Projects\MecoWA\Core\Resources\glfw\lib-vc2022;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>D:\Projects\MecoWA\Core\Resources\glm;D:\Projects\MecoWA\Core\Resources\Jolt;D:\Projects\MecoWA\Core\Resources\glfw\lib-vc2022;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>glfw3.lib;opengl32.lib;gdi32.lib;user32.lib;kernel32.lib;Jolt.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <IgnoreSpecificDefaultLibraries>MSVCRT;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <ShowProgress>LinkVerbose</ShowProgress>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -136,9 +137,9 @@
     <ClCompile Include="Core\Resources\glad\src\glad.c" />
     <ClCompile Include="Core\Scripts\mainscript\ComputeInertiaTensor.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\engine.cpp" />
-    <ClCompile Include="Core\Scripts\mainscript\Jolt\jolt_init.cpp" />
-    <ClCompile Include="Core\Scripts\mainscript\Jolt\jolt_shape_cache.cpp" />
-    <ClCompile Include="Core\Scripts\mainscript\Jolt\jolt_world.cpp" />
+    <ClCompile Include="Core\Scripts\mainscript\jolt_init.cpp" />
+    <ClCompile Include="Core\Scripts\mainscript\jolt_shape_cache.cpp" />
+    <ClCompile Include="Core\Scripts\mainscript\jolt_world.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\objloader.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\physics.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\robjloader.cpp" />
@@ -151,9 +152,10 @@
     <ClInclude Include="Core\Scripts\mainscript\ComputeInertiaTensor.h" />
     <ClInclude Include="Core\Scripts\mainscript\engine.h" />
     <ClInclude Include="Core\Scripts\mainscript\engine_camera.h" />
-    <ClInclude Include="Core\Scripts\mainscript\Jolt\jolt_init.h" />
-    <ClInclude Include="Core\Scripts\mainscript\Jolt\jolt_shape_cache.h" />
-    <ClInclude Include="Core\Scripts\mainscript\Jolt\jolt_world.h" />
+    <ClInclude Include="Core\Scripts\mainscript\jolt_init.h" />
+    <ClInclude Include="Core\Scripts\mainscript\jolt_layers.h" />
+    <ClInclude Include="Core\Scripts\mainscript\jolt_shape_cache.h" />
+    <ClInclude Include="Core\Scripts\mainscript\jolt_world.h" />
     <ClInclude Include="Core\Scripts\mainscript\material_registry.h" />
     <ClInclude Include="Core\Scripts\mainscript\mecowa.h" />
     <ClInclude Include="Core\Scripts\mainscript\objloader.h" />

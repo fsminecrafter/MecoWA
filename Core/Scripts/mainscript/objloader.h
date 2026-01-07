@@ -1,7 +1,7 @@
 #pragma once
 #include <vector>
 #include <string>
-#include <glm/glm.hpp>
+#include <glm/glm/glm.hpp>
 
 struct OBJData {
     std::vector<float> vertexCoords;   // x, y, z

@@ -1,13 +1,13 @@
-#include <glad/glad.h>
-#include <GLFW/glfw3.h>
+#include <glad/include/glad/glad.h>
+#include <glfw/include/GLFW/glfw3.h>
 #include <iostream>
 #include <windows.h>
 #include <cstdio>
 #include <cmath>
 
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
+#include <glm/glm/glm.hpp>
+#include <glm/glm/gtc/matrix_transform.hpp>
+#include <glm/glm/gtc/type_ptr.hpp>
 
 #include "shaderloader.h"
 #include "objloader.h"

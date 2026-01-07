@@ -2,12 +2,12 @@
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include "physics.h"
-#include <glm/gtx/rotate_vector.hpp>
+#include <glm/glm/gtx/rotate_vector.hpp>
 #include <iostream>
 #include <iomanip>
 #include "engine_camera.h"
-#include <glm/gtc/matrix_inverse.hpp>
-#include <glm/gtx/intersect.hpp>
+#include <glm/glm/gtc/matrix_inverse.hpp>
+#include <glm/glm/gtx/intersect.hpp>
 #include <cmath>
 #include <limits>
 #include "objloader.h"
@@ -396,6 +396,65 @@ float ComputeKineticEnergy(const PhysicalModel& pm) {
     return trans + rot;
 }
 
+
+static bool dragging = false;
+static PhysicalModel* draggedModel = nullptr;
+static glm::vec3 grabLocalOffset;
+static glm::vec3 grabWorldPoint;
+static bool prevIsStatic = false;  // remember original static state
+
+// Helper: perform a ray-triangle intersection
+bool RayIntersectsTriangle(const glm::vec3& rayOrigin,
+    const glm::vec3& rayDir,
+    const glm::vec3& v0,
+    const glm::vec3& v1,
+    const glm::vec3& v2,
+    float& distance) {
+    glm::vec2 baryPos;
+    return glm::intersectRayTriangle(rayOrigin, rayDir, v0, v1, v2, baryPos, distance);
+}
+
+// Perform raycast against all scene models
+PhysicalModel* RaycastModels(const glm::vec3& rayOrigin,
+    const glm::vec3& rayDir,
+    glm::vec3& outHitPoint) {
+    float nearest = FLT_MAX;
+    PhysicalModel* result = nullptr;
+
+    for (auto& obj : physicalModels) {
+        auto& model = obj.physics.instance.model;
+        const auto& verts = model.vertexCoords;
+        const auto& indices = model.elementArray;
+
+        glm::mat4 modelMat = ComputeModelMatrix(obj.physics.instance);
+
+        for (size_t i = 0; i + 2 < indices.size(); i += 3) {
+            uint32_t a = indices[i + 0];
+            uint32_t b = indices[i + 1];
+            uint32_t c = indices[i + 2];
+            // bounds check
+            if ((size_t)a * 3 + 2 >= verts.size() ||
+                (size_t)b * 3 + 2 >= verts.size() ||
+                (size_t)c * 3 + 2 >= verts.size()) continue;
+
+            glm::vec3 v0 = glm::vec3(modelMat * glm::vec4(verts[a * 3 + 0], verts[a * 3 + 1], verts[a * 3 + 2], 1.0f));
+            glm::vec3 v1 = glm::vec3(modelMat * glm::vec4(verts[b * 3 + 0], verts[b * 3 + 1], verts[b * 3 + 2], 1.0f));
+            glm::vec3 v2 = glm::vec3(modelMat * glm::vec4(verts[c * 3 + 0], verts[c * 3 + 1], verts[c * 3 + 2], 1.0f));
+
+            float dist;
+            if (RayIntersectsTriangle(rayOrigin, rayDir, v0, v1, v2, dist)) {
+                if (dist < nearest) {
+                    nearest = dist;
+                    outHitPoint = rayOrigin + rayDir * dist;
+                    result = &obj;
+                }
+            }
+        }
+    }
+
+    return result;
+}
+
 // Computes both volume (m^3) and center-of-gravity (centroid) in same units as mesh
 // Returns pair: (volume_m3, centroid)
 // robust ComputeVolumeAndCentroid: uses absolute tetra volumes by default
@@ -722,64 +781,6 @@ void UpdatePhysics(float deltaTime) {
 #ifdef Debug
     PrintPhysicsState();
 #endif
-}
-
-static bool dragging = false;
-static PhysicalModel* draggedModel = nullptr;
-static glm::vec3 grabLocalOffset;
-static glm::vec3 grabWorldPoint;
-static bool prevIsStatic = false;  // remember original static state
-
-// Helper: perform a ray-triangle intersection
-bool RayIntersectsTriangle(const glm::vec3& rayOrigin,
-    const glm::vec3& rayDir,
-    const glm::vec3& v0,
-    const glm::vec3& v1,
-    const glm::vec3& v2,
-    float& distance) {
-    glm::vec2 baryPos;
-    return glm::intersectRayTriangle(rayOrigin, rayDir, v0, v1, v2, baryPos, distance);
-}
-
-// Perform raycast against all scene models
-PhysicalModel* RaycastModels(const glm::vec3& rayOrigin,
-    const glm::vec3& rayDir,
-    glm::vec3& outHitPoint) {
-    float nearest = FLT_MAX;
-    PhysicalModel* result = nullptr;
-
-    for (auto& obj : physicalModels) {
-        auto& model = obj.physics.instance.model;
-        const auto& verts = model.vertexCoords;
-        const auto& indices = model.elementArray;
-
-        glm::mat4 modelMat = ComputeModelMatrix(obj.physics.instance);
-
-        for (size_t i = 0; i + 2 < indices.size(); i += 3) {
-            uint32_t a = indices[i + 0];
-            uint32_t b = indices[i + 1];
-            uint32_t c = indices[i + 2];
-            // bounds check
-            if ((size_t)a * 3 + 2 >= verts.size() ||
-                (size_t)b * 3 + 2 >= verts.size() ||
-                (size_t)c * 3 + 2 >= verts.size()) continue;
-
-            glm::vec3 v0 = glm::vec3(modelMat * glm::vec4(verts[a * 3 + 0], verts[a * 3 + 1], verts[a * 3 + 2], 1.0f));
-            glm::vec3 v1 = glm::vec3(modelMat * glm::vec4(verts[b * 3 + 0], verts[b * 3 + 1], verts[b * 3 + 2], 1.0f));
-            glm::vec3 v2 = glm::vec3(modelMat * glm::vec4(verts[c * 3 + 0], verts[c * 3 + 1], verts[c * 3 + 2], 1.0f));
-
-            float dist;
-            if (RayIntersectsTriangle(rayOrigin, rayDir, v0, v1, v2, dist)) {
-                if (dist < nearest) {
-                    nearest = dist;
-                    outHitPoint = rayOrigin + rayDir * dist;
-                    result = &obj;
-                }
-            }
-        }
-    }
-
-    return result;
 }
 
 void OnRightClickPressed(const Camera& cam, double mouseX, double mouseY, int windowWidth, int windowHeight) {

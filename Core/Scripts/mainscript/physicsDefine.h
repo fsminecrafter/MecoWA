@@ -1,5 +1,5 @@
 #pragma once
-#include <glm/glm.hpp>
+#include <glm/glm/glm.hpp>
 #include <string>
 #include <vector>
 #include "engine.h"  // so we can use ModelInstance
