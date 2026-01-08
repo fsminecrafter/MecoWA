@@ -6,6 +6,7 @@ extern int windowWidth; //640
 extern int windowHeight; //480
 extern float airDensity; //1.225 kg/m^3
 extern float gravityG; //1.0f
+extern bool joltinitsuccess;
 
 extern std::string version;
 

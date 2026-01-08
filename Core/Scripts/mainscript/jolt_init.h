@@ -7,5 +7,5 @@
 extern JPH::PhysicsSystem* gPhysics;
 extern JPH::JobSystemThreadPool* gJobs;
 
-void InitJolt();
+void Jolt_Init();
 void ShutdownJolt();

@@ -46,9 +46,6 @@ struct PhysicalEntry
 
 static std::vector<PhysicalEntry> gBodies;
 
-// Temp allocator REQUIRED for Update()
-static TempAllocatorImpl gTempAllocator(10 * 1024 * 1024);
-
 ////////////////////////////////////////////////////////////
 // Dynamic box
 ////////////////////////////////////////////////////////////
@@ -156,7 +153,8 @@ void Physics_AddDynamic_ConvexHull(ModelInstance& inst)
 ////////////////////////////////////////////////////////////
 void Physics_Update(float dt)
 {
-    gPhysics->Update(dt, 1, &gTempAllocator, gJobs);
+    TempAllocatorImpl temp_allocator(10 * 1024 * 1024);
+    gPhysics->Update(dt, 1, &temp_allocator, gJobs);
 
     BodyInterface& bi = gPhysics->GetBodyInterface();
 

@@ -14,9 +14,8 @@
 #include "engine.h"
 #include "mecowa.h"
 #include "engine_camera.h"
-#include "physics.h"
 #include "material_registry.h"
-
+#include "jolt_init.h"
 
 // Global gravity (in G's, 1G = 9.81 m/s²)
 float gravityG = 1.0f;
@@ -25,6 +24,7 @@ float airDensity = 1.225f;     // kg/m3 (Earth, sea level)
 int windowWidth = 640;
 int windowHeight = 480;
 std::string version = "0.071";
+bool joltinitsuccess = true;
 
 void errorpopup(int code)
 {
@@ -48,26 +48,24 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
     glViewport(0, 0, width, height);
 }
 
-void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
-    Camera* cam = (Camera*)glfwGetWindowUserPointer(window);
-    if (button == GLFW_MOUSE_BUTTON_RIGHT) {
-        double mouseX, mouseY;
-        glfwGetCursorPos(window, &mouseX, &mouseY);
-
-        if (action == GLFW_PRESS) {
-            OnRightClickPressed(*cam, mouseX, mouseY, windowWidth, windowHeight);
-        }
-        else if (action == GLFW_RELEASE) {
-            OnRightClickReleased();
-        }
-    }
-}
-
+//void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
+//    Camera* cam = (Camera*)glfwGetWindowUserPointer(window);
+//    if (button == GLFW_MOUSE_BUTTON_RIGHT) {
+//        double mouseX, mouseY;
+//        glfwGetCursorPos(window, &mouseX, &mouseY);
+//
+//        if (action == GLFW_PRESS) {
+//            OnRightClickPressed(*cam, mouseX, mouseY, windowWidth, windowHeight);
+//        }
+//        else if (action == GLFW_RELEASE) {
+//            OnRightClickReleased();
+//        }
+//    }
+//}
 
 int main(void)
 {
     HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-
     SetConsoleTextAttribute(hConsole, 10);
     printf("Starting MecoWA. Mechanical simulator.\n");
     SetConsoleTextAttribute(hConsole, 15);
@@ -85,6 +83,11 @@ int main(void)
         return -1;
     }
 
+    if(joltinitsuccess == false) {
+        std::cerr << "Failed to initialize Jolt Physics\n";
+        return -1;
+	}
+
     std::string windowTitle = "MecoWA v" + version + " | By Joel_minecrafter | XLABS INC";
     GLFWwindow* window = glfwCreateWindow(windowWidth, windowHeight, windowTitle.c_str(), NULL, NULL);
     if (!window) {
@@ -96,7 +99,7 @@ int main(void)
 
     glfwMakeContextCurrent(window);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-    glfwSetMouseButtonCallback(window, MouseButtonCallback);
+    //glfwSetMouseButtonCallback(window, MouseButtonCallback);
 
     // Initialize GLAD
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
@@ -130,8 +133,8 @@ int main(void)
     CreateObject(R"(Core\Resources\3dmodels\floor.obj)", floor,
         glm::vec3(0.0f, -5.0f, 0.0f), glm::vec3(0.0f), glm::vec3(1.0f));
 
-    RegisterPhysicalModel(sceneModels[0], Material{ "Steel", 100.0f, 0.6f, 0.1f, 0.8f,"" }, false);
-	RegisterPhysicalModel(sceneModels[2], Material{ "Aluminum", 2700.0f, 0.4f, 0.2f, 1.05f,"" }, true);
+    //RegisterPhysicalModel(sceneModels[0], Material{ "Steel", 100.0f, 0.6f, 0.1f, 0.8f,"" }, false);
+	//RegisterPhysicalModel(sceneModels[2], Material{ "Aluminum", 2700.0f, 0.4f, 0.2f, 1.05f,"" }, true);
 
 
     float lastFrame = 0.0f;
@@ -146,9 +149,8 @@ int main(void)
         glfwGetCursorPos(window, &mouseX, &mouseY);
 
         camCtrl.Update(window, deltaTime);
-        UpdatePhysics(deltaTime);
-		UpdateDrag(camera, mouseX, mouseY, windowWidth, windowHeight); // Mouse coords will be added later
-        // Animate the second model a bit
+        //UpdatePhysics(deltaTime);
+		//UpdateDrag(camera, mouseX, mouseY, windowWidth, windowHeight); // Mouse coords will be added later
         sceneModels[1].rotation.y = (float)glfwGetTime() * -50.0f;
 
         glm::mat4 view = GetViewMatrix(camera);
