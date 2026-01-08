@@ -13,6 +13,10 @@
 #include "jolt_bridge.h"
 #include "jolt_layers.h"
 
+#include <Jolt/Jolt.h>
+#include <Jolt/Physics/Collision/Shape/Shape.h>
+#include <Jolt/Renderer/DebugRenderer.h>
+
 std::vector<ModelInstance> sceneModels;
 
 //#define DEBUG

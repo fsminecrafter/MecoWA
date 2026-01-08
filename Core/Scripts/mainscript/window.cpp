@@ -64,6 +64,7 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 //    }
 //}
 
+
 int main(void)
 {
     HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -163,7 +164,6 @@ int main(void)
         glm::mat4 projection = glm::perspective(glm::radians(camera.fov),
             (float)windowWidth / windowHeight,
             0.1f, 100.0f);
-
         shader.use();
         shader.setMat4("view", view);
         shader.setMat4("projection", projection);
@@ -171,7 +171,6 @@ int main(void)
         shader.setFloat("lightStrength", 2.0f);
         shader.setFloat("brightness", 1.0f);
         shader.setVec3("cameraPos", camera.position);
-
         RenderModels(shader);
 
         glfwSwapBuffers(window);
