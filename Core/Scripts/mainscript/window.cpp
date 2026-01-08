@@ -77,6 +77,8 @@ int main(void)
     glfwInitHint(GLFW_ANGLE_PLATFORM_TYPE, GLFW_ANGLE_PLATFORM_TYPE_OPENGL);
     glfwInitHint(GLFW_JOYSTICK_HAT_BUTTONS, GLFW_FALSE);
 
+	Jolt_Init();
+
     if (!glfwInit()) {
         std::cerr << "Failed to initialize GLFW\n";
         glfwprinterror();
@@ -123,7 +125,7 @@ int main(void)
     // Create models using the new engine API
     OBJData cube;
     CreateObject(R"(Core\Resources\3dmodels\cube.obj)", cube,
-        glm::vec3(0.0f, 40.0f, 0.0f), glm::vec3(0.0f), glm::vec3(1.0f));
+        glm::vec3(10.0f, 0.0f, 0.0f), glm::vec3(0.0f), glm::vec3(1.0f));
 
     OBJData monkeOBJ;
     CreateObject(R"(Core\Resources\3dmodels\monke.obj)", monkeOBJ,
@@ -136,6 +138,7 @@ int main(void)
     //RegisterPhysicalModel(sceneModels[0], Material{ "Steel", 100.0f, 0.6f, 0.1f, 0.8f,"" }, false);
 	//RegisterPhysicalModel(sceneModels[2], Material{ "Aluminum", 2700.0f, 0.4f, 0.2f, 1.05f,"" }, true);
 
+    RegisterPhysics_Box(sceneModels[0], 0.0f);
 
     float lastFrame = 0.0f;
     while (!glfwWindowShouldClose(window)) {

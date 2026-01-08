@@ -102,19 +102,24 @@ inline glm::vec3 FromJoltQuat(const Quat& q)
 void RegisterPhysics_Box(
     ModelInstance& inst,
     float mass,
-    float friction = 0.5f,
-    float restitution = 0.1f
+    float friction,
+    float restitution 
 )
 {
     BodyInterface& bi = gPhysics->GetBodyInterface();
 
-    Vec3 halfExtent(
-        inst.scale.x * 0.5f,
-        inst.scale.y * 0.5f,
-        inst.scale.z * 0.5f
-    );
+    Vec3 halfExtent(inst.scale.x * 0.5f, inst.scale.y * 0.5f, inst.scale.z * 0.5f);
 
-    RefConst<Shape> shape = new BoxShape(halfExtent);
+    BoxShapeSettings boxSettings(halfExtent, 0.0f); // convex radius = 0
+    ShapeSettings::ShapeResult result = boxSettings.Create();
+
+    if (result.HasError())
+    {
+        std::cerr << "[Jolt] Failed to create BoxShape\n";
+        return;
+    }
+
+    RefConst<Shape> shape = result.Get();
 
     EMotionType motion = mass > 0.0f ? EMotionType::Dynamic : EMotionType::Static;
 

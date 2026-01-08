@@ -4,8 +4,8 @@
 #include <Jolt/RegisterTypes.h>
 #include <Jolt/Physics/PhysicsSystem.h>
 
-extern JPH::PhysicsSystem* gPhysics;
-extern JPH::JobSystemThreadPool* gJobs;
+inline JPH::PhysicsSystem* gPhysics = nullptr;
+inline JPH::JobSystemThreadPool* gJobs = nullptr;
 
 void Jolt_Init();
 void ShutdownJolt();

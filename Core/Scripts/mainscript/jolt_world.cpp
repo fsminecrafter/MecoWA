@@ -19,25 +19,6 @@
 
 using namespace JPH;
 
-// === STUB IMPLEMENTATION FOR WATER/BUOYANCY (NOT USED) ===
-// This is required because ConvexShape::GetSubmergedVolume is pure virtual
-// and our Jolt library was compiled without full implementation.
-// Since we're not using water physics, we provide empty stubs.
-namespace JPH {
-    void ConvexShape::GetSubmergedVolume(Mat44Arg inCenterOfMassTransform, Vec3Arg inScale, const Plane& inSurface, float& outTotalVolume, float& outSubmergedVolume, Vec3& outCenterOfBuoyancy
-#ifdef JPH_DEBUG_RENDERER
-        , RVec3Arg inBaseOffset
-#endif
-    ) const
-    {
-        // Not implementing water physics - return zero submersion
-        outTotalVolume = 0.0f;
-        outSubmergedVolume = 0.0f;
-        outCenterOfBuoyancy = Vec3::sZero();
-    }
-}
-// === END STUB ===
-
 struct PhysicalEntry
 {
     ModelInstance* inst;
