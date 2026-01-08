@@ -11,10 +11,31 @@
 #include <ctime>
 
 #include "jolt_bridge.h"
+#include "jolt_layers.h"
 
 std::vector<ModelInstance> sceneModels;
 
 //#define DEBUG
+
+glm::vec3 ComputeMeshSize(const OBJData& obj)
+{
+    glm::vec3 min(FLT_MAX);
+    glm::vec3 max(-FLT_MAX);
+
+    for (size_t i = 0; i < obj.vertexCoords.size(); i += 3)
+    {
+        glm::vec3 v(
+            obj.vertexCoords[i + 0],
+            obj.vertexCoords[i + 1],
+            obj.vertexCoords[i + 2]
+        );
+
+        min = glm::min(min, v);
+        max = glm::max(max, v);
+    }
+
+    return max - min;
+}
 
 ModelInstance CreateModelInstance(const OBJData& model, glm::vec3 pos, glm::vec3 rot) {
     ModelInstance instance;
@@ -101,47 +122,68 @@ inline glm::vec3 FromJoltQuat(const Quat& q)
 
 void RegisterPhysics_Box(
     ModelInstance& inst,
+    const OBJData& mesh,
     float mass,
     float friction,
-    float restitution 
+    float restitution,
+    bool originAtBottom
 )
 {
     BodyInterface& bi = gPhysics->GetBodyInterface();
 
-    Vec3 halfExtent(inst.scale.x * 0.5f, inst.scale.y * 0.5f, inst.scale.z * 0.5f);
+    // Mesh size
+    glm::vec3 meshSize = ComputeMeshSize(mesh);
+    glm::vec3 worldSize = meshSize * inst.scale;
 
-    BoxShapeSettings boxSettings(halfExtent, 0.0f); // convex radius = 0
-    ShapeSettings::ShapeResult result = boxSettings.Create();
+    Vec3 halfExtent(
+        worldSize.x * 0.5f,
+        worldSize.y * 0.5f,
+        worldSize.z * 0.5f
+    );
 
+    BoxShapeSettings boxSettings(halfExtent);
+    auto result = boxSettings.Create();
     if (result.HasError())
-    {
-        std::cerr << "[Jolt] Failed to create BoxShape\n";
         return;
-    }
 
     RefConst<Shape> shape = result.Get();
 
-    EMotionType motion = mass > 0.0f ? EMotionType::Dynamic : EMotionType::Static;
+    EMotionType motion = mass > 0.0f
+        ? EMotionType::Dynamic
+        : EMotionType::Static;
+
+    glm::vec3 renderOffset =
+        originAtBottom ? glm::vec3(0, worldSize.y * 0.5f, 0)
+        : glm::vec3(0);
 
     BodyCreationSettings bcs(
         shape,
-        ToJoltVec3(inst.position),
+        ToJoltVec3(inst.position + renderOffset),
         ToJoltQuat(inst.rotation),
         motion,
-        0
+        Layers::NON_MOVING
     );
 
     if (motion == EMotionType::Dynamic)
+    {
+        bcs.mOverrideMassProperties = EOverrideMassProperties::CalculateInertia;
         bcs.mMassPropertiesOverride.mMass = mass;
+        bcs.mObjectLayer = Layers::MOVING;
+    }
 
-    bcs.mOverrideMassProperties = EOverrideMassProperties::CalculateInertia;
     bcs.mFriction = friction;
     bcs.mRestitution = restitution;
 
     BodyID body = bi.CreateAndAddBody(bcs, EActivation::Activate);
 
-    gPhysicsLinks.push_back({ &inst, body });
+    gPhysicsLinks.push_back({
+        &inst,
+        body,
+        renderOffset
+        });
 }
+
+
 
 void Physics_SyncToEngine()
 {
@@ -153,11 +195,11 @@ void Physics_SyncToEngine()
 
         const Body& body = lock.GetBody();
 
-        link.model->position = FromJoltVec3(body.GetPosition());
+        glm::vec3 physicsPos = FromJoltVec3(body.GetPosition());
+        link.model->position = physicsPos - link.renderOffset;
         link.model->rotation = FromJoltQuat(body.GetRotation());
     }
 }
-
 
 Camera CreateCamera(glm::vec3 pos, glm::vec3 rot, float fov) {
     Camera cam;
@@ -298,6 +340,38 @@ ModelInstance& CreateObject(const std::string& path, OBJData& objDataVar,
         << " Scale(" << scale.x << "," << scale.y << "," << scale.z << ")\n";
 
     return sceneModels.back();
+}
+
+void PrintObjectPosition(const ModelInstance& instance, const std::string& name)
+{
+    if (!name.empty())
+        std::cout << "[Object: " << name << "] ";
+
+    std::cout << "Position = ("
+        << instance.position.x << ", "
+        << instance.position.y << ", "
+        << instance.position.z << ")\n";
+}
+
+void PrintObjectTransform(const ModelInstance& instance, const std::string& name)
+{
+    if (!name.empty())
+        std::cout << "[Object: " << name << "]\n";
+
+    std::cout << "  Position: ("
+        << instance.position.x << ", "
+        << instance.position.y << ", "
+        << instance.position.z << ")\n";
+
+    std::cout << "  Rotation: ("
+        << instance.rotation.x << ", "
+        << instance.rotation.y << ", "
+        << instance.rotation.z << ")\n";
+
+    std::cout << "  Scale: ("
+        << instance.scale.x << ", "
+        << instance.scale.y << ", "
+        << instance.scale.z << ")\n";
 }
 
 void RenderModels(Shader& shader) {

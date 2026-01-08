@@ -16,9 +16,10 @@
 #include "engine_camera.h"
 #include "material_registry.h"
 #include "jolt_init.h"
+#include "jolt_world.h"
 
 // Global gravity (in G's, 1G = 9.81 m/s²)
-float gravityG = 1.0f;
+float gravityG = -0.1f;
 float airDensity = 1.225f;     // kg/m3 (Earth, sea level)
 
 int windowWidth = 640;
@@ -125,7 +126,7 @@ int main(void)
     // Create models using the new engine API
     OBJData cube;
     CreateObject(R"(Core\Resources\3dmodels\cube.obj)", cube,
-        glm::vec3(10.0f, 0.0f, 0.0f), glm::vec3(0.0f), glm::vec3(1.0f));
+        glm::vec3(0.0f, 2.0f, 0.0f), glm::vec3(0.0f), glm::vec3(1.0f));
 
     OBJData monkeOBJ;
     CreateObject(R"(Core\Resources\3dmodels\monke.obj)", monkeOBJ,
@@ -137,8 +138,8 @@ int main(void)
 
     //RegisterPhysicalModel(sceneModels[0], Material{ "Steel", 100.0f, 0.6f, 0.1f, 0.8f,"" }, false);
 	//RegisterPhysicalModel(sceneModels[2], Material{ "Aluminum", 2700.0f, 0.4f, 0.2f, 1.05f,"" }, true);
-
-    RegisterPhysics_Box(sceneModels[0], 0.0f);
+    RegisterPhysics_Box(sceneModels[0], cube, 0.1f);
+    RegisterPhysics_Box(sceneModels[2], floor, 0.0f, 0.8f, 0.1f, true);
 
     float lastFrame = 0.0f;
     while (!glfwWindowShouldClose(window)) {
@@ -155,6 +156,8 @@ int main(void)
         //UpdatePhysics(deltaTime);
 		//UpdateDrag(camera, mouseX, mouseY, windowWidth, windowHeight); // Mouse coords will be added later
         sceneModels[1].rotation.y = (float)glfwGetTime() * -50.0f;
+
+		Physics_Update(deltaTime);
 
         glm::mat4 view = GetViewMatrix(camera);
         glm::mat4 projection = glm::perspective(glm::radians(camera.fov),

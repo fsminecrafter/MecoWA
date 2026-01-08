@@ -16,8 +16,9 @@ using namespace JPH;
 
 struct PhysicsLink
 {
-    ModelInstance* model; // MecoWA side
-    BodyID body;          // Jolt side
+    ModelInstance* model;
+    BodyID body;
+    glm::vec3 renderOffset; // model origin -> physics center
 };
 
 static std::vector<PhysicsLink> gPhysicsLinks;

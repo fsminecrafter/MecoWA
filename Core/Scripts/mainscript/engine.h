@@ -4,6 +4,7 @@
 #include "objloader.h"
 #include "shaderloader.h"
 #include <glad/include/glad/glad.h>
+#include <Jolt/Jolt.h>
 
 // Represents a loaded model instance in the scene
 struct ModelInstance {
@@ -47,7 +48,14 @@ void rotateObject(ModelInstance& instance, const glm::vec3& rotation);
 void moveObject(ModelInstance& instance, const glm::vec3& position);
 
 void Physics_SyncToEngine();
-void RegisterPhysics_Box(ModelInstance& inst, float mass, float friction = 0.5f, float restitution = 0.1f);
+void RegisterPhysics_Box(ModelInstance& inst, const OBJData& mesh, float mass, float friction = 0.5f, float restitution = 0.1f, bool originAtBottom = true);
 
 Camera CreateCamera(glm::vec3 pos, glm::vec3 rot, float fov);
 glm::mat4 GetViewMatrix(const Camera& camera);
+void PrintObjectPosition(const ModelInstance& instance, const std::string& name = "");
+void PrintObjectTransform(const ModelInstance& instance, const std::string& name = "");
+
+inline glm::vec3 FromJoltQuat(const JPH::Quat& q);
+inline glm::vec3 FromJoltVec3(const JPH::Vec3& v);
+inline JPH::Quat ToJoltQuat(const glm::vec3& eulerDeg);
+inline JPH::Vec3 ToJoltVec3(const glm::vec3& v);

@@ -154,6 +154,7 @@ JPH_FLOATING_POINT_EXCEPTIONS_ENABLED;JPH_DEBUG_RENDERER;JPH_PROFILE_ENABLED;JPH
     <ClInclude Include="Core\Scripts\mainscript\engine.h" />
     <ClInclude Include="Core\Scripts\mainscript\engine_camera.h" />
     <ClInclude Include="Core\Scripts\mainscript\jolt_init.h" />
+    <ClInclude Include="Core\Scripts\mainscript\jolt_layers.h" />
     <ClInclude Include="Core\Scripts\mainscript\jolt_shape_cache.h" />
     <ClInclude Include="Core\Scripts\mainscript\jolt_world.h" />
     <ClInclude Include="Core\Scripts\mainscript\material_registry.h" />

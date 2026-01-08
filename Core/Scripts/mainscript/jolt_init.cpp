@@ -20,21 +20,12 @@
 #include <cstdarg>
 #include <thread>
 
+#include "engine.h"
+#include "jolt_init.h"
+#include "jolt_layers.h"
 #include "mecowa.h"
 
 using namespace JPH;
-
-// Global physics system and job pool
-inline PhysicsSystem* gPhysics = nullptr;
-inline JobSystemThreadPool* gJobs = nullptr;
-
-namespace Layers
-{
-    inline constexpr ObjectLayer NON_MOVING = 0;
-    inline constexpr ObjectLayer MOVING = 1;
-    inline constexpr ObjectLayer NUM_LAYERS = 2;
-};
-
 // Determines if two object layers should collide
 class ObjectLayerPairFilterImpl : public ObjectLayerPairFilter
 {
@@ -163,6 +154,7 @@ void Jolt_Init()
         ovbpl,
         olpf
     );
+    gPhysics->SetGravity(ToJoltVec3(glm::vec3(0, gravityG,0)));
 
     std::cout << "[Jolt] Physics system initialized successfully.\n";
 }
