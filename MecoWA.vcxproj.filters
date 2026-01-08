@@ -54,6 +54,9 @@
     <ClCompile Include="Core\Scripts\mainscript\jolt_world.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Core\Scripts\mainscript\jolt_bridge.h">
+      <Filter>Header Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="core\resources\glfw\include\glfw\glfw3.h">

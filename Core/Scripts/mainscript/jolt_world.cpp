@@ -155,23 +155,5 @@ void Physics_Update(float dt)
 {
     TempAllocatorImpl temp_allocator(10 * 1024 * 1024);
     gPhysics->Update(dt, 1, &temp_allocator, gJobs);
-
-    BodyInterface& bi = gPhysics->GetBodyInterface();
-
-    for (auto& e : gBodies)
-    {
-        BodyLockRead lock(gPhysics->GetBodyLockInterface(), e.body);
-        if (!lock.Succeeded())
-            continue;
-
-        const Body& body = lock.GetBody();
-
-        Vec3 p = body.GetPosition();
-        Quat q = body.GetRotation();
-
-        e.inst->position = glm::vec3(p[0], p[1], p[2]);
-
-        glm::quat rot(q.GetW(), q.GetX(), q.GetY(), q.GetZ());
-        e.inst->rotation = glm::degrees(glm::eulerAngles(rot));
-    }
+    Physics_SyncToEngine();
 }

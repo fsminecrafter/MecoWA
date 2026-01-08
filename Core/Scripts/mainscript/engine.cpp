@@ -1,5 +1,5 @@
 
-//Cherry engine CORE
+// Cherry engine
 // Made by Joel_minecrafter
 
 
@@ -10,6 +10,7 @@
 #include <random>
 #include <ctime>
 
+#include "jolt_bridge.h"
 
 std::vector<ModelInstance> sceneModels;
 
@@ -74,6 +75,84 @@ void DrawModel(const ModelInstance& instance, Shader& shader, GLuint VAO) {
         << " vertices)\n";
 #endif
 }
+
+inline Vec3 ToJoltVec3(const glm::vec3& v)
+{
+    return Vec3(v.x, v.y, v.z);
+}
+
+inline Quat ToJoltQuat(const glm::vec3& eulerDeg)
+{
+    glm::quat q = glm::quat(glm::radians(eulerDeg));
+    return Quat(q.x, q.y, q.z, q.w);
+}
+
+inline glm::vec3 FromJoltVec3(const Vec3& v)
+{
+    return glm::vec3(v.GetX(), v.GetY(), v.GetZ());
+}
+
+inline glm::vec3 FromJoltQuat(const Quat& q)
+{
+    glm::quat gq(q.GetW(), q.GetX(), q.GetY(), q.GetZ());
+    return glm::degrees(glm::eulerAngles(gq));
+}
+
+
+void RegisterPhysics_Box(
+    ModelInstance& inst,
+    float mass,
+    float friction = 0.5f,
+    float restitution = 0.1f
+)
+{
+    BodyInterface& bi = gPhysics->GetBodyInterface();
+
+    Vec3 halfExtent(
+        inst.scale.x * 0.5f,
+        inst.scale.y * 0.5f,
+        inst.scale.z * 0.5f
+    );
+
+    RefConst<Shape> shape = new BoxShape(halfExtent);
+
+    EMotionType motion = mass > 0.0f ? EMotionType::Dynamic : EMotionType::Static;
+
+    BodyCreationSettings bcs(
+        shape,
+        ToJoltVec3(inst.position),
+        ToJoltQuat(inst.rotation),
+        motion,
+        0
+    );
+
+    if (motion == EMotionType::Dynamic)
+        bcs.mMassPropertiesOverride.mMass = mass;
+
+    bcs.mOverrideMassProperties = EOverrideMassProperties::CalculateInertia;
+    bcs.mFriction = friction;
+    bcs.mRestitution = restitution;
+
+    BodyID body = bi.CreateAndAddBody(bcs, EActivation::Activate);
+
+    gPhysicsLinks.push_back({ &inst, body });
+}
+
+void Physics_SyncToEngine()
+{
+    for (auto& link : gPhysicsLinks)
+    {
+        BodyLockRead lock(gPhysics->GetBodyLockInterface(), link.body);
+        if (!lock.Succeeded())
+            continue;
+
+        const Body& body = lock.GetBody();
+
+        link.model->position = FromJoltVec3(body.GetPosition());
+        link.model->rotation = FromJoltQuat(body.GetRotation());
+    }
+}
+
 
 Camera CreateCamera(glm::vec3 pos, glm::vec3 rot, float fov) {
     Camera cam;

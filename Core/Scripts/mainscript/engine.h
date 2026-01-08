@@ -46,5 +46,7 @@ void Transform(ModelInstance& instance, const glm::vec3& rotation, const glm::ve
 void rotateObject(ModelInstance& instance, const glm::vec3& rotation);
 void moveObject(ModelInstance& instance, const glm::vec3& position);
 
+void Physics_SyncToEngine();
+
 Camera CreateCamera(glm::vec3 pos, glm::vec3 rot, float fov);
 glm::mat4 GetViewMatrix(const Camera& camera);

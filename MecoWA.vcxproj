@@ -137,6 +137,7 @@
     <ClCompile Include="Core\Resources\glad\src\glad.c" />
     <ClCompile Include="Core\Scripts\mainscript\ComputeInertiaTensor.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\engine.cpp" />
+    <ClCompile Include="Core\Scripts\mainscript\jolt_bridge.h" />
     <ClCompile Include="Core\Scripts\mainscript\jolt_init.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\jolt_shape_cache.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\jolt_world.cpp" />
