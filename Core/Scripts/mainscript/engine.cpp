@@ -16,9 +16,10 @@
 
 #include <Jolt/Jolt.h>
 #include <Jolt/Physics/Collision/Shape/Shape.h>
+#include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
 #include <Jolt/Renderer/DebugRenderer.h>
 
-std::vector<ModelInstance> sceneModels;
+std::vector<ObjectList> sceneModels;
 
 //#define DEBUG
 
@@ -196,6 +197,85 @@ void RegisterPhysics_Box(
         });
 }
 
+void RegisterPhysics_Convex(
+    ModelInstance& inst,
+    float mass,
+    float friction = 0.6f,
+    float restitution = 0.1f,
+    bool originAtBottom = false
+)
+{
+    const OBJData& mesh = inst.model;
+    BodyInterface& bi = gPhysics->GetBodyInterface();
+
+    Array<Vec3> points;
+    for (size_t i = 0; i < mesh.vertexCoords.size(); i += 3)
+    {
+        glm::vec3 v(
+            mesh.vertexCoords[i + 0],
+            mesh.vertexCoords[i + 1],
+            mesh.vertexCoords[i + 2]
+        );
+
+        // Apply model scale
+        v *= inst.scale;
+
+        points.push_back(ToJoltVec3(v));
+    }
+
+    if (points.empty())
+        return;
+
+    ConvexHullShapeSettings hullSettings(points);
+    auto result = hullSettings.Create();
+    if (result.HasError())
+        return;
+
+    RefConst<Shape> shape = result.Get();
+
+    EMotionType motion = mass > 0.0f
+        ? EMotionType::Dynamic
+        : EMotionType::Static;
+
+    glm::vec3 bboxMin(FLT_MAX);
+    glm::vec3 bboxMax(-FLT_MAX);
+    for (auto& p : points)
+    {
+        bboxMin = glm::min(bboxMin, FromJoltVec3(p));
+        bboxMax = glm::max(bboxMax, FromJoltVec3(p));
+    }
+    glm::vec3 size = bboxMax - bboxMin;
+
+    glm::vec3 renderOffset =
+        originAtBottom ? glm::vec3(0, size.y * 0.5f, 0) : glm::vec3(0);
+
+    BodyCreationSettings bcs(
+        shape,
+        ToJoltVec3(inst.position + renderOffset),
+        ToJoltQuat(inst.rotation),
+        motion,
+        Layers::NON_MOVING
+    );
+
+    if (motion == EMotionType::Dynamic)
+    {
+        bcs.mOverrideMassProperties = EOverrideMassProperties::CalculateInertia;
+        bcs.mMassPropertiesOverride.mMass = mass;
+        bcs.mObjectLayer = Layers::MOVING;
+    }
+
+    bcs.mFriction = friction;
+    bcs.mRestitution = restitution;
+
+    BodyID body = bi.CreateAndAddBody(bcs, EActivation::Activate);
+
+    gPhysicsLinks.push_back({
+        &inst,
+        body,
+        renderOffset
+        });
+}
+
 void Physics_SyncToEngine()
 {
     for (auto& link : gPhysicsLinks)
@@ -247,7 +327,7 @@ void moveObject(ModelInstance& instance, const glm::vec3& position) {
     instance.position += position;
 }
 
-ModelInstance& CreateObject(const std::string& path, OBJData& objDataVar,
+ModelInstance& CreateObject(const std::string& path, OBJData& objDataVar, std::string name,
     const glm::vec3& pos, const glm::vec3& rot, const glm::vec3& scale)
 {
     if (!loadOBJ(path, objDataVar)) {
@@ -343,14 +423,14 @@ ModelInstance& CreateObject(const std::string& path, OBJData& objDataVar,
     glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(9 * sizeof(float)));
     glEnableVertexAttribArray(3);
 
-    sceneModels.push_back(instance);
+	sceneModels.push_back({ name, instance });
 
     std::cout << "[Scene] Added object from " << path
         << " | Pos(" << pos.x << "," << pos.y << "," << pos.z << ")"
         << " Rot(" << rot.x << "," << rot.y << "," << rot.z << ")"
         << " Scale(" << scale.x << "," << scale.y << "," << scale.z << ")\n";
 
-    return sceneModels.back();
+    return sceneModels.back().instance;
 }
 
 void PrintObjectPosition(const ModelInstance& instance, const std::string& name)
@@ -386,10 +466,43 @@ void PrintObjectTransform(const ModelInstance& instance, const std::string& name
 }
 
 void RenderModels(Shader& shader) {
-    for (auto& instance : sceneModels) {
+    for (auto& sceneObj : sceneModels) {
+		ModelInstance& instance = sceneObj.instance;
         glm::mat4 modelMatrix = ComputeModelMatrix(instance);
         shader.setMat4("model", modelMatrix);
         glBindVertexArray(instance.VAO);
         glDrawElements(GL_TRIANGLES, (GLsizei)instance.elementData.size(), GL_UNSIGNED_INT, 0);
     }
+}
+
+bool RemoveObject(ModelInstance& instance) {
+    // Delete GPU resources
+    glDeleteVertexArrays(1, &instance.VAO);
+    glDeleteBuffers(1, &instance.VBO);
+    glDeleteBuffers(1, &instance.EBO);
+
+    // Remove from sceneModels
+    auto it = std::remove_if(sceneModels.begin(), sceneModels.end(),
+        [&](const ObjectList& obj) { return &obj.instance == &instance; });
+
+    if (it != sceneModels.end()) {
+        sceneModels.erase(it, sceneModels.end());
+        std::cout << "[Scene] Removed object from scene.\n";
+        return true;
+    }
+    else {
+        std::cerr << "[Scene] Warning: Attempted to remove object not in scene.\n";
+        return false;
+    }
+}
+
+ModelInstance& GetObjectByName(const std::string& name) {
+    for (auto& sceneObj : sceneModels) {
+        if (sceneObj.name == name) {
+            return sceneObj.instance;
+        }
+    }
+    static ModelInstance dummy;
+    std::cerr << "[Scene] Warning: Object with name '" << name << "' not found.\n";
+    return dummy;
 }

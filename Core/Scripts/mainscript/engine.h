@@ -31,13 +31,17 @@ struct Camera {
     float fov = 45.0f;
 };
 
+struct ObjectList {
+    std::string name;
+    ModelInstance instance;
+};
+
 // Global scene container
-extern std::vector<ModelInstance> sceneModels;
+extern std::vector<ObjectList> sceneModels;
 
 // Function declarations
 ModelInstance CreateModelInstance(const OBJData& model, glm::vec3 pos, glm::vec3 rot);
-ModelInstance& CreateObject(const std::string& path, OBJData& objDataVar,
-    const glm::vec3& pos, const glm::vec3& rot, const glm::vec3& scale);
+ModelInstance& CreateObject(const std::string& path, OBJData& objDataVar, std::string name, const glm::vec3& pos, const glm::vec3& rot, const glm::vec3& scale);
 void RenderModels(Shader& shader);
 
 glm::mat4 ComputeModelMatrix(const ModelInstance& instance);
@@ -59,3 +63,6 @@ inline glm::vec3 FromJoltQuat(const JPH::Quat& q);
 inline glm::vec3 FromJoltVec3(const JPH::Vec3& v);
 inline JPH::Quat ToJoltQuat(const glm::vec3& eulerDeg);
 inline JPH::Vec3 ToJoltVec3(const glm::vec3& v);
+
+bool RemoveObject(ModelInstance& instance);
+ModelInstance& GetObjectByName(const std::string& name);

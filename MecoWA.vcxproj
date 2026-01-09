@@ -138,7 +138,6 @@ JPH_FLOATING_POINT_EXCEPTIONS_ENABLED;JPH_DEBUG_RENDERER;JPH_PROFILE_ENABLED;JPH
     <ClCompile Include="Core\Scripts\mainscript\ComputeInertiaTensor.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\engine.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\jolt_bridge.h" />
-    <ClCompile Include="Core\Scripts\mainscript\jolt_debugrender.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\jolt_init.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\jolt_shape_cache.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\jolt_world.cpp" />
@@ -154,7 +153,6 @@ JPH_FLOATING_POINT_EXCEPTIONS_ENABLED;JPH_DEBUG_RENDERER;JPH_PROFILE_ENABLED;JPH
     <ClInclude Include="Core\Scripts\mainscript\ComputeInertiaTensor.h" />
     <ClInclude Include="Core\Scripts\mainscript\engine.h" />
     <ClInclude Include="Core\Scripts\mainscript\engine_camera.h" />
-    <ClInclude Include="Core\Scripts\mainscript\jolt_debugrender.h" />
     <ClInclude Include="Core\Scripts\mainscript\jolt_init.h" />
     <ClInclude Include="Core\Scripts\mainscript\jolt_layers.h" />
     <ClInclude Include="Core\Scripts\mainscript\jolt_shape_cache.h" />
