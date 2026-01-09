@@ -12,6 +12,7 @@
 
 #include "jolt_bridge.h"
 #include "jolt_layers.h"
+#include <glm/glm/glm.hpp>
 
 #include <Jolt/Jolt.h>
 #include <Jolt/Physics/Collision/Shape/Shape.h>
@@ -130,14 +131,22 @@ void RegisterPhysics_Box(
     float mass,
     float friction,
     float restitution,
-    bool originAtBottom
+    bool originAtBottom,
+	glm::vec3 boxsize
 )
 {
     BodyInterface& bi = gPhysics->GetBodyInterface();
 
-    // Mesh size
-    glm::vec3 meshSize = ComputeMeshSize(mesh);
-    glm::vec3 worldSize = meshSize * inst.scale;
+    glm::vec3 worldSize;
+    if (boxsize != glm::vec3(0.0f))
+    {
+        worldSize = boxsize;
+    }
+    else
+    {
+        glm::vec3 meshSize = ComputeMeshSize(mesh);
+        worldSize = meshSize * inst.scale;
+    }
 
     Vec3 halfExtent(
         worldSize.x * 0.5f,
@@ -186,8 +195,6 @@ void RegisterPhysics_Box(
         renderOffset
         });
 }
-
-
 
 void Physics_SyncToEngine()
 {
