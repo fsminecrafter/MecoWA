@@ -18,13 +18,24 @@
 #include "jolt_init.h"
 #include "jolt_world.h"
 
+#include <Jolt/Jolt.h>
+#include <Jolt/Physics/Body/BodyManager.h>
+#include <Jolt/Renderer/DebugRenderer.h>
+
+
+#ifdef _DEBUG
+#include "debugrender.h"
+#endif
+
+extern JPH::PhysicsSystem* gPhysics;
+
 // Global gravity (in G's, 1G = 9.81 m/s²)
 float gravityG = -1.0f;
 float airDensity = 1.225f;     // kg/m3 (Earth, sea level)
 
 int windowWidth = 640;
 int windowHeight = 480;
-std::string version = "0.071";
+std::string version = "0.073";
 bool joltinitsuccess = true;
 
 void errorpopup(int code)
@@ -75,7 +86,7 @@ int main(void)
 
     // GLFW setup
     glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WIN32);
-    glfwInitHint(GLFW_ANGLE_PLATFORM_TYPE, GLFW_ANGLE_PLATFORM_TYPE_OPENGL);
+    //glfwInitHint(GLFW_ANGLE_PLATFORM_TYPE, GLFW_ANGLE_PLATFORM_TYPE_OPENGL);
     glfwInitHint(GLFW_JOYSTICK_HAT_BUTTONS, GLFW_FALSE);
 
 	Jolt_Init();
@@ -111,6 +122,21 @@ int main(void)
         return -1;
     }
 
+    bool g_DebugPhysics = true;
+
+    OpenGLDebugRenderer* g_DebugRenderer = nullptr;
+    if (g_DebugPhysics)
+    {
+        g_DebugRenderer = new OpenGLDebugRenderer();
+    }
+    JPH::BodyManager::DrawSettings drawSettings;
+    drawSettings.mDrawShape = true;
+    drawSettings.mDrawBoundingBox = false;
+    drawSettings.mDrawWorldTransform = false;
+    drawSettings.mDrawVelocity = false;
+    drawSettings.mDrawMassAndInertia = false;
+
+
     glEnable(GL_DEPTH_TEST);
 
     Shader shader(
@@ -140,8 +166,7 @@ int main(void)
 	//RegisterPhysicalModel(sceneModels[2], Material{ "Aluminum", 2700.0f, 0.4f, 0.2f, 1.05f,"" }, true);
     RegisterPhysics_Box(sceneModels[0].instance, cube, 0.1f);
     RegisterPhysics_Box(sceneModels[2].instance, floor, 0.0f, 0.8f, 0.1f, true);
-
-    RemoveObject(GetObjectByName("Monke"));
+    RegisterPhysics_Box(sceneModels[2].instance, floor, 0.0f, 0.8f, 0.1f, true);
 
     float lastFrame = 0.0f;
     while (!glfwWindowShouldClose(window)) {
@@ -172,10 +197,32 @@ int main(void)
         shader.setVec3("cameraPos", camera.position);
         
         RenderModels(shader);
+
+        glUseProgram(0);
+        glBindVertexArray(0);
+
+        glMatrixMode(GL_MODELVIEW);
+        glLoadIdentity();
+
+        if (g_DebugPhysics && g_DebugRenderer)
+        {
+            g_DebugRenderer->SetCameraPosition(
+                camera.position.x,
+                camera.position.y,
+                camera.position.z
+            );
+
+            gPhysics->DrawBodies(drawSettings, g_DebugRenderer, nullptr);
+        }
+        glBindVertexArray(0);
+        glUseProgram(shader.ID);
+
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
 
     glfwTerminate();
+    delete g_DebugRenderer;
+    g_DebugRenderer = nullptr;
     return 0;
 }

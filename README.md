@@ -2,7 +2,7 @@
 
 ### Introduction
 
-#### MecoWA v0.072
+#### MecoWA v0.073
 
 MecoWA is a mechanical simulator made in C++ using OpenGL and GLFW.
 It is still in very early development, so don't expect much yet.
@@ -18,7 +18,7 @@ Joltphysics git (https://github.com/jrouwe/JoltPhysics)
 
 - 3D Rendering (:
 - Lighting (:
-- Joltphysics
+- Joltphysics (:
 - No GUI yet...
 - No Cross-Platform (Windows, Linux, MacOS) yet...
 - No sound yet...
