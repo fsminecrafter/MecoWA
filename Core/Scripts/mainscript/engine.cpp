@@ -200,9 +200,9 @@ void RegisterPhysics_Box(
 void RegisterPhysics_Convex(
     ModelInstance& inst,
     float mass,
-    float friction = 0.6f,
-    float restitution = 0.1f,
-    bool originAtBottom = false
+    float friction,
+    float restitution,
+    bool originAtBottom
 )
 {
     const OBJData& mesh = inst.model;

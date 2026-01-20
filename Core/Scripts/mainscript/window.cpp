@@ -167,6 +167,7 @@ int main(void)
 
     //RegisterPhysicalModel(sceneModels[0], Material{ "Steel", 100.0f, 0.6f, 0.1f, 0.8f,"" }, false);
 	//RegisterPhysicalModel(sceneModels[2], Material{ "Aluminum", 2700.0f, 0.4f, 0.2f, 1.05f,"" }, true);
+    RegisterPhysics_Convex(sceneModels[1].instance, 1.0f);
     RegisterPhysics_Box(sceneModels[0].instance, cube, 0.1f, 0.5f, 0.1f, false, glm::vec3(2.0f, 2.0f, 2.0f));
     RegisterPhysics_Box(sceneModels[2].instance, floor, 0.0f, 0.8f, 0.1f, false, glm::vec3(10.0f, 0.3f, 10.0f));
 
@@ -183,7 +184,6 @@ int main(void)
         camCtrl.Update(window, deltaTime);
         Physics_Update(deltaTime);
         //UpdateDrag(camera, mouseX, mouseY, windowWidth, windowHeight); // Mouse coords will be added later
-        GetObjectByName("Monke").rotation.y = (float)glfwGetTime() * -50.0f;
 
         glm::mat4 view = GetViewMatrix(camera);
         glm::mat4 projection = glm::perspective(glm::radians(camera.fov),

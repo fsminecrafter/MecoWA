@@ -53,6 +53,7 @@ void moveObject(ModelInstance& instance, const glm::vec3& position);
 
 void Physics_SyncToEngine();
 void RegisterPhysics_Box(ModelInstance& inst, const OBJData& mesh, float mass, float friction = 0.5f, float restitution = 0.1f, bool originAtBottom = true, glm::vec3 boxsize = glm::vec3(1.0f, 1.0f, 1.0f));
+void RegisterPhysics_Convex(ModelInstance& inst, float mass, float friction = 0.6f, float restitution = 0.1f, bool originAtBottom = false);
 
 Camera CreateCamera(glm::vec3 pos, glm::vec3 rot, float fov);
 glm::mat4 GetViewMatrix(const Camera& camera);
