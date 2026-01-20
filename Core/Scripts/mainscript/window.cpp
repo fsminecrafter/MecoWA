@@ -22,10 +22,11 @@
 #include <Jolt/Physics/Body/BodyManager.h>
 #include <Jolt/Renderer/DebugRenderer.h>
 
-
 #ifdef _DEBUG
 #include "debugrender.h"
 #endif
+
+bool debugmode = false;
 
 extern JPH::PhysicsSystem* gPhysics;
 
@@ -129,6 +130,8 @@ int main(void)
     {
         g_DebugRenderer = new OpenGLDebugRenderer();
     }
+
+
     JPH::BodyManager::DrawSettings drawSettings;
     drawSettings.mDrawShape = true;
     drawSettings.mDrawBoundingBox = false;
@@ -164,9 +167,8 @@ int main(void)
 
     //RegisterPhysicalModel(sceneModels[0], Material{ "Steel", 100.0f, 0.6f, 0.1f, 0.8f,"" }, false);
 	//RegisterPhysicalModel(sceneModels[2], Material{ "Aluminum", 2700.0f, 0.4f, 0.2f, 1.05f,"" }, true);
-    RegisterPhysics_Box(sceneModels[0].instance, cube, 0.1f);
-    RegisterPhysics_Box(sceneModels[2].instance, floor, 0.0f, 0.8f, 0.1f, true);
-    RegisterPhysics_Box(sceneModels[2].instance, floor, 0.0f, 0.8f, 0.1f, true);
+    RegisterPhysics_Box(sceneModels[0].instance, cube, 0.1f, 0.5f, 0.1f, false, glm::vec3(2.0f, 2.0f, 2.0f));
+    RegisterPhysics_Box(sceneModels[2].instance, floor, 0.0f, 0.8f, 0.1f, false, glm::vec3(10.0f, 0.3f, 10.0f));
 
     float lastFrame = 0.0f;
     while (!glfwWindowShouldClose(window)) {
@@ -180,14 +182,14 @@ int main(void)
 
         camCtrl.Update(window, deltaTime);
         Physics_Update(deltaTime);
-		//UpdateDrag(camera, mouseX, mouseY, windowWidth, windowHeight); // Mouse coords will be added later
+        //UpdateDrag(camera, mouseX, mouseY, windowWidth, windowHeight); // Mouse coords will be added later
         GetObjectByName("Monke").rotation.y = (float)glfwGetTime() * -50.0f;
 
         glm::mat4 view = GetViewMatrix(camera);
         glm::mat4 projection = glm::perspective(glm::radians(camera.fov),
             (float)windowWidth / windowHeight,
             0.1f, 100.0f);
-        
+
         shader.use();
         shader.setMat4("view", view);
         shader.setMat4("projection", projection);
@@ -195,27 +197,35 @@ int main(void)
         shader.setFloat("lightStrength", 2.0f);
         shader.setFloat("brightness", 1.0f);
         shader.setVec3("cameraPos", camera.position);
-        
+
+        glEnable(GL_DEPTH_TEST);
+
         RenderModels(shader);
 
-        glUseProgram(0);
-        glBindVertexArray(0);
+        if (debugmode == true) {
+            glDisable(GL_DEPTH_TEST);
+            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
-        glMatrixMode(GL_MODELVIEW);
-        glLoadIdentity();
+            glUseProgram(0);
+            glBindVertexArray(0);
 
-        if (g_DebugPhysics && g_DebugRenderer)
-        {
-            g_DebugRenderer->SetCameraPosition(
-                camera.position.x,
-                camera.position.y,
-                camera.position.z
-            );
+            glMatrixMode(GL_MODELVIEW);
+            glLoadIdentity();
+            if (g_DebugPhysics && g_DebugRenderer && gPhysics)
+            {
+                g_DebugRenderer->SetCameraPosition(
+                    camera.position.x,
+                    camera.position.y,
+                    camera.position.z
+                );
 
-            gPhysics->DrawBodies(drawSettings, g_DebugRenderer, nullptr);
+                g_DebugRenderer->SetViewProjection(view, projection);
+
+                gPhysics->DrawBodies(drawSettings, g_DebugRenderer, nullptr);
+            }
+            glBindVertexArray(0);
+            glUseProgram(shader.ID);
         }
-        glBindVertexArray(0);
-        glUseProgram(shader.ID);
 
         glfwSwapBuffers(window);
         glfwPollEvents();

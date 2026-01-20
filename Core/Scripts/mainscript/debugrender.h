@@ -2,6 +2,8 @@
 
 #include <Jolt/Jolt.h>
 #include <Jolt/Renderer/DebugRenderer.h>
+#include <glm/glm/mat4x4.hpp>
+
 
 class OpenGLDebugRenderer final : public JPH::DebugRenderer
 {
@@ -14,7 +16,7 @@ public:
         JPH::ColorArg color, ECastShadow castShadow) override;
     void DrawText3D(JPH::RVec3Arg position, const std::string_view& text,
         JPH::ColorArg color, float height) override;
-
+    void SetViewProjection(const glm::mat4& view, const glm::mat4& projection);
     Batch CreateTriangleBatch(const Vertex* vertices, int vertexCount,
         const JPH::uint32* indices, int indexCount) override;
 
@@ -33,4 +35,6 @@ public:
 
 private:
     JPH::Vec3 _cameraPos{ 0, 0, 0 };
+    glm::mat4 _view{ 1.0f };
+    glm::mat4 _projection{ 1.0f };
 };

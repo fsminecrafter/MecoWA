@@ -3,6 +3,11 @@
 #include <glad/include/glad/glad.h>
 #include <glfw/include/GLFW/glfw3.h>
 
+#include <glm/glm/mat4x4.hpp>
+#include <glm/glm/glm.hpp>
+#include <glm/glm/gtc/type_ptr.hpp>
+#include <glm/glm/gtc/matrix_transform.hpp>
+
 #include <vector>
 #include <cstddef>
 #include <atomic>
@@ -36,6 +41,14 @@ private:
     GLuint _ebo = 0;
     int _indexCount = 0;
 };
+
+void OpenGLDebugRenderer::SetViewProjection(const glm::mat4& view,
+    const glm::mat4& projection)
+{
+    _view = view;
+    _projection = projection;
+}
+
 
 void OpenGLBatch::AddRef()
 {
@@ -234,11 +247,21 @@ void OpenGLDebugRenderer::DrawGeometry(JPH::RMat44Arg modelMatrix,
     glPolygonMode(GL_FRONT_AND_BACK,
         drawMode == EDrawMode::Wireframe ? GL_LINE : GL_FILL);
 
+    glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
+    glLoadMatrixf(glm::value_ptr(_projection));
+
+    glMatrixMode(GL_MODELVIEW);
     glPushMatrix();
 
-    float mat[16];
-    modelMatrix.StoreFloat4x4((JPH::Float4*)mat);
-    glMultMatrixf(mat);
+    // View * Model
+    glm::mat4 model;
+    float m[16];
+    modelMatrix.StoreFloat4x4((JPH::Float4*)m);
+    model = _view * glm::make_mat4(m);
+
+    glLoadMatrixf(glm::value_ptr(model));
+
 
     const auto& lod =
         geometry->GetLOD(_cameraPos, worldBounds, lodScaleSq);
@@ -248,7 +271,11 @@ void OpenGLDebugRenderer::DrawGeometry(JPH::RMat44Arg modelMatrix,
 
     batch->Draw(modelColor);
 
+    glPopMatrix(); // MODELVIEW
+    glMatrixMode(GL_PROJECTION);
     glPopMatrix();
+    glMatrixMode(GL_MODELVIEW);
+
 }
 
 void OpenGLDebugRenderer::SetCameraPosition(float x, float y, float z)
