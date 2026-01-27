@@ -22,6 +22,9 @@
 #include <Jolt/Physics/Body/BodyManager.h>
 #include <Jolt/Renderer/DebugRenderer.h>
 
+#include <sstream>
+#include <string.h>
+
 #ifdef _DEBUG
 #include "debugrender.h"
 #endif
@@ -29,6 +32,7 @@
 bool debugmode = false;
 
 extern JPH::PhysicsSystem* gPhysics;
+using namespace std;
 
 // Global gravity (in G's, 1G = 9.81 m/s²)
 float gravityG = -1.0f;
@@ -147,6 +151,10 @@ int main(void)
         R"(Core\Resources\fragment.glsl)"
     );
 
+	Material Metal("Metal", 7800.0f, 0.3f, 0.2f, 0.8f);
+
+	MaterialRegistry::Register(Metal);
+
     // Create camera
     static Camera camera = CreateCamera(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f), 45.0f);
     CameraController camCtrl(camera);
@@ -167,7 +175,14 @@ int main(void)
 
     //RegisterPhysicalModel(sceneModels[0], Material{ "Steel", 100.0f, 0.6f, 0.1f, 0.8f,"" }, false);
 	//RegisterPhysicalModel(sceneModels[2], Material{ "Aluminum", 2700.0f, 0.4f, 0.2f, 1.05f,"" }, true);
-    RegisterPhysics_Convex(sceneModels[1].instance, 1.0f);
+    float mass = MaterialRegistry::Apply(sceneModels[0].instance, "Metal");
+
+    string t = to_string(mass);
+    char const* n_char = t.c_str();
+
+    printf("mass: %s \n", n_char);
+
+    RegisterPhysics_Convex(sceneModels[1].instance, mass);
     RegisterPhysics_Box(sceneModels[0].instance, cube, 0.1f, 0.5f, 0.1f, false, glm::vec3(2.0f, 2.0f, 2.0f));
     RegisterPhysics_Box(sceneModels[2].instance, floor, 0.0f, 0.8f, 0.1f, false, glm::vec3(10.0f, 0.3f, 10.0f));
 
@@ -194,7 +209,7 @@ int main(void)
         shader.setMat4("view", view);
         shader.setMat4("projection", projection);
         shader.setVec3("lightDir", glm::normalize(glm::vec3(-0.5f, -1.0f, -0.3f)));
-        shader.setFloat("lightStrength", 2.0f);
+        shader.setFloat("lightStrength", 1.0f);
         shader.setFloat("brightness", 1.0f);
         shader.setVec3("cameraPos", camera.position);
 

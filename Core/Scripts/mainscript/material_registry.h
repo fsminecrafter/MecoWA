@@ -3,7 +3,9 @@
 #include <unordered_map>
 #include <vector>
 #include <iostream>
+#include <cmath>
 #include "physicsDefine.h"
+#include "engine.h"
 
 class MaterialRegistry {
 public:
@@ -11,7 +13,7 @@ public:
     static void Register(const Material& mat) {
         materials()[mat.name] = mat;
 
-#ifdef Debug
+#ifdef _DEBUG
         std::cout << "[MaterialRegistry] Registered material: "
             << mat.name
             << " | Density=" << mat.density
@@ -20,6 +22,57 @@ public:
             << " | Restitution=" << mat.restitution
             << std::endl;
 #endif
+    }
+
+    static float Apply(const ModelInstance& object, const std::string& materialName)
+    {
+        const Material& mat = MaterialRegistry::Get(materialName);
+
+        const OBJData& mesh = object.model;
+
+        float volume = 0.0f;
+
+        for (size_t i = 0; i < mesh.elementArray.size(); i += 3)
+        {
+            uint32_t i0 = mesh.elementArray[i + 0] * 3;
+            uint32_t i1 = mesh.elementArray[i + 1] * 3;
+            uint32_t i2 = mesh.elementArray[i + 2] * 3;
+
+            glm::vec3 a(
+                mesh.vertexCoords[i0 + 0],
+                mesh.vertexCoords[i0 + 1],
+                mesh.vertexCoords[i0 + 2]
+            );
+
+            glm::vec3 b(
+                mesh.vertexCoords[i1 + 0],
+                mesh.vertexCoords[i1 + 1],
+                mesh.vertexCoords[i1 + 2]
+            );
+
+            glm::vec3 c(
+                mesh.vertexCoords[i2 + 0],
+                mesh.vertexCoords[i2 + 1],
+                mesh.vertexCoords[i2 + 2]
+            );
+
+            // apply instance scale
+            a *= object.scale;
+            b *= object.scale;
+            c *= object.scale;
+
+            glm::vec3 ab = b - a;
+            glm::vec3 ac = c - a;
+
+            volume += glm::dot(a, glm::cross(ab, ac)) / 6.0f;
+        }
+
+        volume = std::abs(volume);
+
+        float mass = volume * mat.density;
+
+        // round to 1 decimal (0.1)
+        return std::round(mass * 10.0f) / 10.0f;
     }
 
     // Check if exists
@@ -35,7 +88,7 @@ public:
         if (it != mats.end())
             return it->second;
 
-#ifdef Debug
+#ifdef _DEBUG
         std::cout << "[MaterialRegistry] WARNING: Material '" << name
             << "' not found. Using Default.\n";
 #endif
@@ -45,7 +98,8 @@ public:
 
     // List all materials (debug)
     static void Dump() {
-#ifdef Debug
+
+#ifdef _DEBUG
         std::cout << "\n=== Material Registry Dump ===\n";
         for (auto& [name, mat] : materials()) {
             std::cout << name
