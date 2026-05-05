@@ -17,6 +17,7 @@
 #include "material_registry.h"
 #include "jolt_init.h"
 #include "jolt_world.h"
+#include "debugui.h"
 
 #include <Jolt/Jolt.h>
 #include <Jolt/Physics/Body/BodyManager.h>
@@ -34,7 +35,7 @@ bool debugmode = false;
 extern JPH::PhysicsSystem* gPhysics;
 using namespace std;
 
-// Global gravity (in G's, 1G = 9.81 m/s�)
+// Global gravity (in G's, 1G = 9.81 m/s²)
 float gravityG = -1.0f;
 float airDensity = 1.225f;     // kg/m3 (Earth, sea level)
 
@@ -65,20 +66,21 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
     glViewport(0, 0, width, height);
 }
 
-//void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
-//    Camera* cam = (Camera*)glfwGetWindowUserPointer(window);
-//    if (button == GLFW_MOUSE_BUTTON_RIGHT) {
-//        double mouseX, mouseY;
-//        glfwGetCursorPos(window, &mouseX, &mouseY);
-//
-//        if (action == GLFW_PRESS) {
-//            OnRightClickPressed(*cam, mouseX, mouseY, windowWidth, windowHeight);
-//        }
-//        else if (action == GLFW_RELEASE) {
-//            OnRightClickReleased();
-//        }
-//    }
-//}
+// ── Key callback ─────────────────────────────────────────────────────────────
+// Alt+D  → toggle ImGui debug overlay
+// F3     → toggle Jolt wireframe debug draw (existing debugmode)
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
+{
+    // Let ImGui handle Alt+D first; if it consumed the event, stop here
+    if (DebugUI_HandleKey(key, action, mods))
+        return;
+
+    if (key == GLFW_KEY_F3 && action == GLFW_PRESS)
+        debugmode = !debugmode;
+
+    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
+        glfwSetWindowShouldClose(window, true);
+}
 
 int main(void)
 {
@@ -91,10 +93,9 @@ int main(void)
 
     // GLFW setup
     glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WIN32);
-    //glfwInitHint(GLFW_ANGLE_PLATFORM_TYPE, GLFW_ANGLE_PLATFORM_TYPE_OPENGL);
     glfwInitHint(GLFW_JOYSTICK_HAT_BUTTONS, GLFW_FALSE);
 
-	Jolt_Init();
+    Jolt_Init();
 
     if (!glfwInit()) {
         std::cerr << "Failed to initialize GLFW\n";
@@ -102,10 +103,15 @@ int main(void)
         return -1;
     }
 
-    if(joltinitsuccess == false) {
+    if (joltinitsuccess == false) {
         std::cerr << "Failed to initialize Jolt Physics\n";
         return -1;
-	}
+    }
+
+    // Request an OpenGL 3.3 core context (required by ImGui's GLSL #version 330)
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
     std::string windowTitle = "MecoWA v" + version + " | By Joel_minecrafter | XLABS INC";
     GLFWwindow* window = glfwCreateWindow(windowWidth, windowHeight, windowTitle.c_str(), NULL, NULL);
@@ -118,7 +124,7 @@ int main(void)
 
     glfwMakeContextCurrent(window);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-    //glfwSetMouseButtonCallback(window, MouseButtonCallback);
+    glfwSetKeyCallback(window, key_callback);
 
     // Initialize GLAD
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
@@ -127,22 +133,22 @@ int main(void)
         return -1;
     }
 
+    // ── Dear ImGui ────────────────────────────────────────────────────────────
+    DebugUI_Init(window);
+
+    // ── Jolt debug renderer ───────────────────────────────────────────────────
     bool g_DebugPhysics = true;
 
     OpenGLDebugRenderer* g_DebugRenderer = nullptr;
     if (g_DebugPhysics)
-    {
         g_DebugRenderer = new OpenGLDebugRenderer();
-    }
-
 
     JPH::BodyManager::DrawSettings drawSettings;
-    drawSettings.mDrawShape = true;
-    drawSettings.mDrawBoundingBox = false;
+    drawSettings.mDrawShape          = true;
+    drawSettings.mDrawBoundingBox    = false;
     drawSettings.mDrawWorldTransform = false;
-    drawSettings.mDrawVelocity = false;
+    drawSettings.mDrawVelocity       = false;
     drawSettings.mDrawMassAndInertia = false;
-
 
     glEnable(GL_DEPTH_TEST);
 
@@ -151,103 +157,117 @@ int main(void)
         R"(Core\Resources\fragment.glsl)"
     );
 
-	Material Metal("Metal", 7800.0f, 0.3f, 0.2f, 0.8f);
-
-	MaterialRegistry::Register(Metal);
+    Material Metal("Metal", 7800.0f, 0.3f, 0.2f, 0.8f);
+    MaterialRegistry::Register(Metal);
 
     // Create camera
     static Camera camera = CreateCamera(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f), 45.0f);
     CameraController camCtrl(camera);
     glfwSetWindowUserPointer(window, &camera);
 
-    // Create models using the new engine API
+    // ── Scene setup ───────────────────────────────────────────────────────────
     OBJData cube;
     CreateObject(R"(Core\Resources\3dmodels\cube.obj)", cube, "Cube",
         glm::vec3(0.0f, 2.0f, 0.0f), glm::vec3(0.0f), glm::vec3(1.0f));
 
     OBJData monkeOBJ;
-	CreateObject(R"(Core\Resources\3dmodels\monke.obj)", monkeOBJ, "Monke",
+    CreateObject(R"(Core\Resources\3dmodels\monke.obj)", monkeOBJ, "Monke",
         glm::vec3(2.0f, 0.0f, 0.0f), glm::vec3(0.0f), glm::vec3(1.5f));
 
     OBJData floor;
-	CreateObject(R"(Core\Resources\3dmodels\floor.obj)", floor, "Floor",
+    CreateObject(R"(Core\Resources\3dmodels\floor.obj)", floor, "Floor",
         glm::vec3(0.0f, -5.0f, 0.0f), glm::vec3(0.0f), glm::vec3(1.0f));
 
-    //RegisterPhysicalModel(sceneModels[0], Material{ "Steel", 100.0f, 0.6f, 0.1f, 0.8f,"" }, false);
-	//RegisterPhysicalModel(sceneModels[2], Material{ "Aluminum", 2700.0f, 0.4f, 0.2f, 1.05f,"" }, true);
     float mass = MaterialRegistry::Apply(sceneModels[0].instance, "Metal");
 
     string t = to_string(mass);
     char const* n_char = t.c_str();
-
     printf("mass: %s \n", n_char);
 
     RegisterPhysics_Convex(sceneModels[1].instance, mass);
-    RegisterPhysics_Box(sceneModels[0].instance, cube, 0.1f, 0.5f, 0.1f, false, glm::vec3(2.0f, 2.0f, 2.0f));
+    RegisterPhysics_Box(sceneModels[0].instance, cube,  0.1f, 0.5f, 0.1f, false, glm::vec3(2.0f, 2.0f, 2.0f));
     RegisterPhysics_Box(sceneModels[2].instance, floor, 0.0f, 0.8f, 0.1f, false, glm::vec3(10.0f, 0.3f, 10.0f));
 
+    // ── Main loop ─────────────────────────────────────────────────────────────
     float lastFrame = 0.0f;
-    while (!glfwWindowShouldClose(window)) {
+
+    while (!glfwWindowShouldClose(window))
+    {
+        float currentFrame = (float)glfwGetTime();
+        float deltaTime    = currentFrame - lastFrame;
+        lastFrame          = currentFrame;
+
+        glfwPollEvents();
+
+        // ── Update ────────────────────────────────────────────────────────────
+        // Only move the camera when ImGui is NOT capturing the mouse/keyboard
+        if (!ImGui::GetIO().WantCaptureMouse && !ImGui::GetIO().WantCaptureKeyboard)
+            camCtrl.Update(window, deltaTime);
+
+        Physics_Update(deltaTime);
+
+        // ── Render ────────────────────────────────────────────────────────────
+        glClearColor(0.07f, 0.08f, 0.10f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        float currentFrame = (float)glfwGetTime();
-        float deltaTime = currentFrame - lastFrame;
-        lastFrame = currentFrame;
-        double mouseX, mouseY;
-        glfwGetCursorPos(window, &mouseX, &mouseY);
-
-        camCtrl.Update(window, deltaTime);
-        Physics_Update(deltaTime);
-        //UpdateDrag(camera, mouseX, mouseY, windowWidth, windowHeight); // Mouse coords will be added later
-
         glm::mat4 view = GetViewMatrix(camera);
-        glm::mat4 projection = glm::perspective(glm::radians(camera.fov),
-            (float)windowWidth / windowHeight,
+        glm::mat4 projection = glm::perspective(
+            glm::radians(camera.fov),
+            (float)windowWidth / (float)windowHeight,
             0.1f, 100.0f);
 
+        // Feed light values from the ImGui Renderer tab back into the shader
+        const float* ld = DebugUI_GetLightDir();
         shader.use();
-        shader.setMat4("view", view);
-        shader.setMat4("projection", projection);
-        shader.setVec3("lightDir", glm::normalize(glm::vec3(-0.5f, -1.0f, -0.3f)));
-        shader.setFloat("lightStrength", 1.0f);
-        shader.setFloat("brightness", 1.0f);
-        shader.setVec3("cameraPos", camera.position);
+        shader.setMat4 ("view",         view);
+        shader.setMat4 ("projection",   projection);
+        shader.setVec3 ("lightDir",     glm::normalize(glm::vec3(ld[0], ld[1], ld[2])));
+        shader.setFloat("lightStrength",DebugUI_GetLightStrength());
+        shader.setFloat("brightness",   DebugUI_GetBrightness());
+        shader.setVec3 ("cameraPos",    camera.position);
 
         glEnable(GL_DEPTH_TEST);
-
         RenderModels(shader);
 
-        if (debugmode == true) {
+        // ── Jolt wireframe debug draw (F3) ────────────────────────────────────
+        if (debugmode)
+        {
             glDisable(GL_DEPTH_TEST);
             glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
             glUseProgram(0);
             glBindVertexArray(0);
-
             glMatrixMode(GL_MODELVIEW);
             glLoadIdentity();
+
             if (g_DebugPhysics && g_DebugRenderer && gPhysics)
             {
                 g_DebugRenderer->SetCameraPosition(
-                    camera.position.x,
-                    camera.position.y,
-                    camera.position.z
-                );
-
+                    camera.position.x, camera.position.y, camera.position.z);
                 g_DebugRenderer->SetViewProjection(view, projection);
-
                 gPhysics->DrawBodies(drawSettings, g_DebugRenderer, nullptr);
             }
+
             glBindVertexArray(0);
             glUseProgram(shader.ID);
+
+            // Restore fill mode (ImGui needs it)
+            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+            glEnable(GL_DEPTH_TEST);
         }
 
+        // ── Dear ImGui overlay (Alt+D) ────────────────────────────────────────
+        DebugUI_Render();
+
         glfwSwapBuffers(window);
-        glfwPollEvents();
     }
 
-    glfwTerminate();
+    // ── Cleanup ───────────────────────────────────────────────────────────────
+    DebugUI_Shutdown();
+
     delete g_DebugRenderer;
     g_DebugRenderer = nullptr;
+
+    glfwTerminate();
     return 0;
 }
