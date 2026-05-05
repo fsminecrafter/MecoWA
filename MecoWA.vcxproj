@@ -147,6 +147,13 @@ JPH_FLOATING_POINT_EXCEPTIONS_ENABLED;JPH_DEBUG_RENDERER;JPH_PROFILE_ENABLED;JPH
     <ClCompile Include="Core\Scripts\mainscript\robjloader.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\shaderloader.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\window.cpp" />
+    <ClCompile Include="Core\Resources\imgui\imgui.cpp" />
+    <ClCompile Include="Core\Resources\imgui\imgui_draw.cpp" />
+    <ClCompile Include="Core\Resources\imgui\imgui_tables.cpp" />
+    <ClCompile Include="Core\Resources\imgui\imgui_widgets.cpp" />
+    <ClCompile Include="Core\Resources\imgui\backends\imgui_impl_glfw.cpp" />
+    <ClCompile Include="Core\Resources\imgui\backends\imgui_impl_opengl3.cpp" />
+    <ClCompile Include="Core\Scripts\mainscript\debugui.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="core\resources\glfw\include\glfw\glfw3.h" />
