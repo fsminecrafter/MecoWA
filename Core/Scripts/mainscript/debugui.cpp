@@ -22,8 +22,8 @@
 
 // ── ImGui core ────────────────────────────────────────────────────────────────
 #include <imgui/imgui.h>
-#include <imgui/backends/imgui_impl_glfw.h>
-#include <imgui/backends/imgui_impl_opengl3.h>
+#include <imgui/imgui_impl_glfw.h>
+#include <imgui/imgui_impl_opengl3.h>
 
 // ── Project headers ───────────────────────────────────────────────────────────
 #include "engine.h"        // sceneModels, ModelInstance
@@ -38,12 +38,14 @@
 #include <Jolt/Physics/Body/BodyInterface.h>
 
 // ── Standard ──────────────────────────────────────────────────────────────────
-#include <GLFW/glfw3.h>
+#include <glfw/include/GLFW/glfw3.h>
 #include <glm/glm/glm.hpp>
 #include <string>
 #include <deque>
 #include <algorithm>
 #include <cstring>
+
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Internal state

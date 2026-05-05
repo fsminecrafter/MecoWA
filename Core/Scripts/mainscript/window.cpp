@@ -1,5 +1,11 @@
 #include <glad/include/glad/glad.h>
 #include <glfw/include/GLFW/glfw3.h>
+#include "debugui.h"
+#include "imgui/imgui.h"
+#include "imgui/imgui_impl_glfw.h"
+#include "imgui/imgui_impl_opengl3.h"
+#include "imgui/imgui_internal.h"
+#include "imgui/imconfig.h"
 #include <iostream>
 #include <windows.h>
 #include <cstdio>
@@ -17,7 +23,6 @@
 #include "material_registry.h"
 #include "jolt_init.h"
 #include "jolt_world.h"
-#include "debugui.h"
 
 #include <Jolt/Jolt.h>
 #include <Jolt/Physics/Body/BodyManager.h>

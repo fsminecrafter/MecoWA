@@ -94,7 +94,7 @@
       <PreprocessorDefinitions>%(PreprocessorDefinitions);_DEBUG;_WINDOWS;
 JPH_FLOATING_POINT_EXCEPTIONS_ENABLED;JPH_DEBUG_RENDERER;JPH_PROFILE_ENABLED;JPH_OBJECT_STREAM;JPH_USE_AVX2;JPH_USE_AVX;JPH_USE_SSE4_1;JPH_USE_SSE4_2;JPH_USE_LZCNT;JPH_USE_TZCNT;JPH_USE_F16C;JPH_USE_FMADD</PreprocessorDefinitions>
       <WarningLevel>Level3</WarningLevel>
-      <AdditionalIncludeDirectories>$(ProjectDir)Core\Resources;$(ProjectDir)Core\SaveData;$(ProjectDir)Core\Data;$(ProjectDir)Core\Settings;$(ProjectDir)Core\Sounds;$(ProjectDir)Core\Temp;$(ProjectDir)Core\Resources\imgui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)Core\Resources\glm;$(ProjectDir)Core\Resources;$(ProjectDir)Core\SaveData;$(ProjectDir)Core\Data;$(ProjectDir)Core\Settings;$(ProjectDir)Core\Sounds;$(ProjectDir)Core\Temp;$(ProjectDir)Core\Resources\imgui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalModuleDependencies>%(AdditionalModuleDependencies)</AdditionalModuleDependencies>
       <MultiProcessorCompilation>false</MultiProcessorCompilation>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
@@ -103,7 +103,7 @@ JPH_FLOATING_POINT_EXCEPTIONS_ENABLED;JPH_DEBUG_RENDERER;JPH_PROFILE_ENABLED;JPH
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
-      <AdditionalLibraryDirectories>D:\Projects\MecoWA\Core\Resources\glad;D:\Projects\MecoWA\Core\Resources\glm;D:\Projects\MecoWA\Core\Resources\Jolt;D:\Projects\MecoWA\Core\Resources\glfw\lib-vc2022;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(ProjectDir)Core\Resources\glad;$(ProjectDir)Core\Resources\glm;$(ProjectDir)Core\Resources\Jolt;$(ProjectDir)Core\Resources\glfw\lib-vc2022;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>glfw3.lib;opengl32.lib;gdi32.lib;user32.lib;kernel32.lib;Jolt.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <IgnoreSpecificDefaultLibraries>MSVCRT;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
       <ShowProgress>LinkVerbose</ShowProgress>
@@ -151,8 +151,8 @@ JPH_FLOATING_POINT_EXCEPTIONS_ENABLED;JPH_DEBUG_RENDERER;JPH_PROFILE_ENABLED;JPH
     <ClCompile Include="Core\Resources\imgui\imgui_draw.cpp" />
     <ClCompile Include="Core\Resources\imgui\imgui_tables.cpp" />
     <ClCompile Include="Core\Resources\imgui\imgui_widgets.cpp" />
-    <ClCompile Include="Core\Resources\imgui\backends\imgui_impl_glfw.cpp" />
-    <ClCompile Include="Core\Resources\imgui\backends\imgui_impl_opengl3.cpp" />
+    <ClCompile Include="Core\Resources\imgui\imgui_impl_glfw.cpp" />
+    <ClCompile Include="Core\Resources\imgui\imgui_impl_opengl3.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\debugui.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -160,6 +160,7 @@ JPH_FLOATING_POINT_EXCEPTIONS_ENABLED;JPH_DEBUG_RENDERER;JPH_PROFILE_ENABLED;JPH
     <ClInclude Include="core\resources\glfw\include\glfw\glfw3native.h" />
     <ClInclude Include="Core\Scripts\mainscript\ComputeInertiaTensor.h" />
     <ClInclude Include="Core\Scripts\mainscript\debugrender.h" />
+    <ClInclude Include="Core\Scripts\mainscript\debugui.h" />
     <ClInclude Include="Core\Scripts\mainscript\engine.h" />
     <ClInclude Include="Core\Scripts\mainscript\engine_camera.h" />
     <ClInclude Include="Core\Scripts\mainscript\jolt_init.h" />
@@ -183,6 +184,9 @@ JPH_FLOATING_POINT_EXCEPTIONS_ENABLED;JPH_DEBUG_RENDERER;JPH_PROFILE_ENABLED;JPH
     <None Include="Core\Resources\lighting.glsl" />
     <None Include="Core\Resources\vertex.glsl" />
     <None Include="README.md" />
+  </ItemGroup>
+  <ItemGroup>
+    <Library Include="Core\Resources\glfw\lib-vc2022\glfw3.lib" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

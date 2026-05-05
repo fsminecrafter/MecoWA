@@ -131,13 +131,13 @@
 #else
 #define GLFW_HAS_WAYLAND    0
 #endif
-#include <GLFW/glfw3.h>
+#include <glfw/include/GLFW/glfw3.h>
 #ifdef _WIN32
 #undef APIENTRY
 #ifndef GLFW_EXPOSE_NATIVE_WIN32    // for glfwGetWin32Window()
 #define GLFW_EXPOSE_NATIVE_WIN32
 #endif
-#include <GLFW/glfw3native.h>
+#include <glfw/include/GLFW/glfw3native.h>
 #elif defined(__APPLE__)
 #ifndef GLFW_EXPOSE_NATIVE_COCOA    // for glfwGetCocoaWindow()
 #define GLFW_EXPOSE_NATIVE_COCOA

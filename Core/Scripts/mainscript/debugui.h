@@ -15,3 +15,7 @@ bool DebugUI_HandleKey(int key, int action, int mods);
 
 // Clean up ImGui context (call before glfwTerminate)
 void DebugUI_Shutdown();
+
+const float* DebugUI_GetLightDir();
+float DebugUI_GetBrightness();
+float DebugUI_GetLightStrength();
