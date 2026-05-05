@@ -280,17 +280,35 @@ void Physics_SyncToEngine()
 {
     for (auto& link : gPhysicsLinks)
     {
+        // Use the locking body interface – safe to call from any thread.
         BodyLockRead lock(gPhysics->GetBodyLockInterface(), link.body);
         if (!lock.Succeeded())
             continue;
 
         const Body& body = lock.GetBody();
 
-        glm::vec3 physicsPos = FromJoltVec3(body.GetPosition());
-        link.model->position = physicsPos - link.renderOffset;
-        link.model->rotation = FromJoltQuat(body.GetRotation());
+        // Position
+        // Jolt simulates the physics centre-of-mass.
+        // Subtract the render offset so the mesh origin lands correctly.
+        JPH::Vec3 jPos = body.GetPosition();
+        link.model->position = glm::vec3(jPos.GetX(), jPos.GetY(), jPos.GetZ())
+            - link.renderOffset;
+
+        // Rotation
+        // JPH::Quat  stores components as (x, y, z, w).
+        // glm::quat  constructor is      glm::quat(w, x, y, z).
+        // glm::eulerAngles returns radians; convert to degrees.
+        JPH::Quat jRot = body.GetRotation();
+        glm::quat gRot(
+            jRot.GetW(),   // w – scalar / real part
+            jRot.GetX(),   // x
+            jRot.GetY(),   // y
+            jRot.GetZ()    // z
+        );
+        link.model->rotation = glm::degrees(glm::eulerAngles(gRot));
     }
 }
+
 
 Camera CreateCamera(glm::vec3 pos, glm::vec3 rot, float fov) {
     Camera cam;

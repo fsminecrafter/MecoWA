@@ -35,7 +35,7 @@
 #include "debugrender.h"
 #endif
 
-bool debugmode = false;
+bool debugmode = true;
 
 extern JPH::PhysicsSystem* gPhysics;
 using namespace std;
