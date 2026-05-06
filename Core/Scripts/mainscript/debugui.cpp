@@ -945,6 +945,9 @@ void DebugUI_Render()
             ImGui::EndTabBar();
         }
     }
+
+    if (ImGui::BeginTabItem("Scene File"))
+        { DebugUI_RenderSceneFilePanel(); ImGui::EndTabItem(); }
     ImGui::End();
 
     ImGui::Render();
