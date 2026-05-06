@@ -29,7 +29,7 @@ struct BottomMenuCategory
 //  Public API
 // ─────────────────────────────────────────────────────────────────────────────
 void DebugUI_Init(GLFWwindow* window);
-void DebugUI_Render();
+void DebugUI_Render(float deltaTime);
 bool DebugUI_HandleKey(int key, int action, int mods);
 void DebugUI_Shutdown();
 
@@ -38,6 +38,7 @@ float DebugUI_GetBrightness();
 float DebugUI_GetLightStrength();
 float DebugUI_GetTimeScale();
 void DebugUI_SetTimeScale(float scale);
+void DebugUI_LoadAndApplyScene(const char* path);
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Bottom Menu API - Modular interface

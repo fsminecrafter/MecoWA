@@ -903,3 +903,11 @@ void DebugUI_RenderSceneEditor()
     // ── Status bar ────────────────────────────────────────────────────────────
     DrawStatusBar();
 }
+
+void DebugUI_LoadAndApplyScene(const char* path)
+{
+    using namespace SceneEd;
+    DoLoad(path);
+    for (const auto& o : g_scene.objects)
+        SpawnObject(o);
+}

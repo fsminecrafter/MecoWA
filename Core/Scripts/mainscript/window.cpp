@@ -171,27 +171,7 @@ int main(void)
     glfwSetWindowUserPointer(window, &camera);
 
     // ── Scene setup ───────────────────────────────────────────────────────────
-    OBJData cube;
-    CreateObject(R"(Core\Resources\3dmodels\cube.obj)", cube, "Cube",
-        glm::vec3(0.0f, 2.0f, 0.0f), glm::vec3(0.0f), glm::vec3(1.0f));
-
-    OBJData monkeOBJ;
-    CreateObject(R"(Core\Resources\3dmodels\monke.obj)", monkeOBJ, "Monke",
-        glm::vec3(2.0f, 0.0f, 0.0f), glm::vec3(0.0f), glm::vec3(1.5f));
-
-    OBJData floor;
-    CreateObject(R"(Core\Resources\3dmodels\floor.obj)", floor, "Floor",
-        glm::vec3(0.0f, -5.0f, 0.0f), glm::vec3(0.0f), glm::vec3(1.0f));
-
-    float mass = MaterialRegistry::Apply(sceneModels[0].instance, "Metal");
-
-    string t = to_string(mass);
-    char const* n_char = t.c_str();
-    printf("mass: %s \n", n_char);
-
-    RegisterPhysics_Convex(sceneModels[1].instance, mass);
-    RegisterPhysics_Box(sceneModels[0].instance, cube,  0.1f, 0.5f, 0.1f, false, glm::vec3(2.0f, 2.0f, 2.0f));
-    RegisterPhysics_Box(sceneModels[2].instance, floor, 0.0f, 0.8f, 0.1f, false, glm::vec3(10.0f, 0.3f, 10.0f));
+    DebugUI_LoadAndApplyScene("Core/Data/scene.scn");
 
     // ── Main loop ─────────────────────────────────────────────────────────────
     float lastFrame = 0.0f;
@@ -264,7 +244,7 @@ int main(void)
         }
 
         // ── Dear ImGui overlay (Alt+D) ────────────────────────────────────────
-        DebugUI_Render();
+        DebugUI_Render(deltaTime);
 
         glfwSwapBuffers(window);
     }

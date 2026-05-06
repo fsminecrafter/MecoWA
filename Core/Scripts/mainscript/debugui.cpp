@@ -1,5 +1,5 @@
 #include "debugui.h"
-
+#include "engine.h"
 #include <imgui/imgui.h>
 #include <imgui/imgui_impl_glfw.h>
 #include <imgui/imgui_impl_opengl3.h>
@@ -72,7 +72,7 @@ static void RenderBottomMenu()
         ImGui::Text("Time Scale:");
         ImGui::SameLine(100.0f);
 
-        if (ImGui::Button("⏸ Pause", ImVec2(50, 0)))
+        if (ImGui::Button("Pause", ImVec2(50, 0)))
             g_timeScale = 0.0f;
         ImGui::SameLine();
 
@@ -91,13 +91,39 @@ static void RenderBottomMenu()
         if (ImGui::Button("4x", ImVec2(50, 0)))
             g_timeScale = 4.0f;
 
+        ImGui::SameLine(0, 20);
+        ImGui::Separator();
+        ImGui::SameLine(0, 20);
+
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.55f, 0.1f, 0.1f, 1.f });
+        if (ImGui::Button("Reset", ImVec2(100, 0)))
+        {
+            // Clear and reload
+            sceneModels.clear();
+            DebugUI_LoadAndApplyScene("Core/Data/scene.scn");
+        }
+        ImGui::PopStyleColor();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Clear the scene and reload Core/Data/scene.scn");
+
         // Stats column
         ImGui::TableSetColumnIndex(1);
         ImGui::Text("Current: %.1fx | FPS: %.1f | Objects: %zu", g_timeScale, g_avgFps, sceneModels.size());
 
+        ImGui::SameLine(0, 20);
+
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.55f, 0.1f, 0.1f, 1.f });
+        if (ImGui::Button("Reset Scene", ImVec2(100, 0)))
+        {
+            sceneModels.clear();
+            DebugUI_LoadAndApplyScene("Core/Data/scene.scn");
+        }
+        ImGui::PopStyleColor();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Clear the scene and reload Core/Data/scene.scn");
+
         ImGui::EndTable();
     }
-
     ImGui::Separator();
 
     // Category tabs
