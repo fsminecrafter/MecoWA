@@ -942,12 +942,11 @@ void DebugUI_Render()
             if (ImGui::BeginTabItem("Render"))     { PanelRenderer();       ImGui::EndTabItem(); }
             if (ImGui::BeginTabItem("Perf"))       { PanelPerformance();    ImGui::EndTabItem(); }
             if (ImGui::BeginTabItem("Log"))        { PanelLog();            ImGui::EndTabItem(); }
+            if (ImGui::BeginTabItem("Scene File")) { DebugUI_RenderSceneFilePanel(); ImGui::EndTabItem(); }
             ImGui::EndTabBar();
         }
     }
 
-    if (ImGui::BeginTabItem("Scene File"))
-        { DebugUI_RenderSceneFilePanel(); ImGui::EndTabItem(); }
     ImGui::End();
 
     ImGui::Render();
