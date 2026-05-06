@@ -1,0 +1,26 @@
+# MecoWA Scene File
+# Format version 1
+# Lines starting with # are comments
+# Each object is defined by 4 lines:
+#   Line 1: ObjectName, ParentName   (use "none" for no parent)
+#   Line 2: ModelPath, TexturePath   (relative to MecoWA project root, use "none" for no texture)
+#   Line 3: X, Y, Z, RX, RY, RZ, SX, SY, SZ
+#   Line 4: Static, Weight           (Static: 0=dynamic 1=static, Weight: kg, 0=auto from material)
+
+# ── Ground plane ──────────────────────────────────────────────────────────────
+Floor, none
+Core/Resources/3dmodels/floor.obj, none
+0.0, -5.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0
+1, 0.0
+
+# ── Test cube (dynamic, metal-mass auto) ─────────────────────────────────────
+Cube, none
+Core/Resources/3dmodels/cube.obj, none
+0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0
+0, 0.0
+
+# ── Monkey head (dynamic convex) ─────────────────────────────────────────────
+Monke, none
+Core/Resources/3dmodels/monke.obj, none
+2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.5, 1.5, 1.5
+0, 0.0
