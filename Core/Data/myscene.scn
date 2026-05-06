@@ -1,26 +1,35 @@
-# MecoWA Scene File
-# Format version 1
-# Lines starting with # are comments
-# Each object is defined by 4 lines:
-#   Line 1: ObjectName, ParentName   (use "none" for no parent)
-#   Line 2: ModelPath, TexturePath   (relative to MecoWA project root, use "none" for no texture)
-#   Line 3: X, Y, Z, RX, RY, RZ, SX, SY, SZ
-#   Line 4: Static, Weight           (Static: 0=dynamic 1=static, Weight: kg, 0=auto from material)
+# MecoWA Scene File  (format v2)
+# OBJECT / END_OBJECT blocks, COLLIDER / END_COLLIDER children
 
-# ── Ground plane ──────────────────────────────────────────────────────────────
-Floor, none
-Core/Resources/3dmodels/floor.obj, none
-0.0, -5.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0
-1, 0.0
-
-# ── Test cube (dynamic, metal-mass auto) ─────────────────────────────────────
-Cube, none
+# ── Object_0 ──────────────────────────────────
+OBJECT
+Object_0, none
 Core/Resources/3dmodels/cube.obj, none
-0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0
-0, 0.0
+-1.620000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 1.000000, 1.000000, 1.000000
+0, 0.000000
+END_OBJECT
 
-# ── Monkey head (dynamic convex) ─────────────────────────────────────────────
-Monke, none
-Core/Resources/3dmodels/monke.obj, none
-2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.5, 1.5, 1.5
-0, 0.0
+# ── Object_0_copy ──────────────────────────────────
+OBJECT
+Object_0_copy, none
+Core/Resources/3dmodels/cube.obj, none
+0.000000, 2.150000, 0.000000, 0.000000, 0.000000, 0.000000, 1.000000, 1.000000, 1.000000
+0, 0.000000
+END_OBJECT
+
+# ── Object_0_copy_copy ──────────────────────────────────
+OBJECT
+Object_0_copy_copy, none
+Core/Resources/3dmodels/cube.obj, none
+0.000000, 0.000000, 2.510000, 0.000000, 0.000000, 0.000000, 1.000000, 1.000000, 1.000000
+0, 0.000000
+END_OBJECT
+
+# ── Object_0_copy_copy_copy ──────────────────────────────────
+OBJECT
+Object_0_copy_copy_copy, none
+Core/Resources/3dmodels/cube.obj, none
+1.540000, -1.340000, 1.140000, 0.000000, 0.000000, 0.000000, 1.000000, 2.740000, 1.000000
+0, 0.000000
+END_OBJECT
+
