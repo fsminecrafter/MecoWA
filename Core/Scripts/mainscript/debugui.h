@@ -1,21 +1,48 @@
 #pragma once
 
+#include <string>
+#include <vector>
+#include <functional>
+
 // Forward declarations to avoid heavy includes in header
 struct GLFWwindow;
 
-// Call once after OpenGL + GLFW are initialized
+// ─────────────────────────────────────────────────────────────────────────────
+//  Bottom Menu Item - Modular UI Component
+// ─────────────────────────────────────────────────────────────────────────────
+struct BottomMenuCategory
+{
+    std::string name;
+    std::vector<std::string> items;
+    bool isExpanded = false;
+
+    BottomMenuCategory(const std::string& categoryName)
+        : name(categoryName) {}
+
+    void AddItem(const std::string& itemName)
+    {
+        items.push_back(itemName);
+    }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Public API
+// ─────────────────────────────────────────────────────────────────────────────
 void DebugUI_Init(GLFWwindow* window);
-
-// Call once per frame (before glfwSwapBuffers)
 void DebugUI_Render();
-
-// Call in GLFW key callback – handles Alt+D toggle
-// Returns true if ImGui consumed the event (caller should skip own handling)
 bool DebugUI_HandleKey(int key, int action, int mods);
-
-// Clean up ImGui context (call before glfwTerminate)
 void DebugUI_Shutdown();
 
 const float* DebugUI_GetLightDir();
 float DebugUI_GetBrightness();
 float DebugUI_GetLightStrength();
+float DebugUI_GetTimeScale();
+void DebugUI_SetTimeScale(float scale);
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Bottom Menu API - Modular interface
+// ─────────────────────────────────────────────────────────────────────────────
+void DebugUI_AddBottomMenuCategory(const std::string& categoryName);
+void DebugUI_AddItemToCategory(const std::string& categoryName, const std::string& itemName);
+void DebugUI_SetBottomMenuCallback(const std::string& categoryName, const std::string& itemName,
+                                    std::function<void()> callback);

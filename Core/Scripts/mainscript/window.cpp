@@ -209,7 +209,9 @@ int main(void)
         if (!ImGui::GetIO().WantCaptureMouse && !ImGui::GetIO().WantCaptureKeyboard)
             camCtrl.Update(window, deltaTime);
 
-        Physics_Update(deltaTime);
+        float scaledDeltaTime = deltaTime * DebugUI_GetTimeScale();  // Apply time scale
+        Physics_Update(scaledDeltaTime);  // Pass scaled time to physics
+
 
         // ── Render ────────────────────────────────────────────────────────────
         glClearColor(0.07f, 0.08f, 0.10f, 1.0f);
