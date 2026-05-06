@@ -137,6 +137,7 @@ JPH_FLOATING_POINT_EXCEPTIONS_ENABLED;JPH_DEBUG_RENDERER;JPH_PROFILE_ENABLED;JPH
     <ClCompile Include="Core\Resources\glad\src\glad.c" />
     <ClCompile Include="Core\Scripts\mainscript\ComputeInertiaTensor.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\debugrender.cpp" />
+    <ClCompile Include="Core\Scripts\mainscript\debugui_scenefile.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\engine.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\jolt_bridge.h" />
     <ClCompile Include="Core\Scripts\mainscript\jolt_init.cpp" />
@@ -145,6 +146,7 @@ JPH_FLOATING_POINT_EXCEPTIONS_ENABLED;JPH_DEBUG_RENDERER;JPH_PROFILE_ENABLED;JPH
     <ClCompile Include="Core\Scripts\mainscript\objloader.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\physics.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\robjloader.cpp" />
+    <ClCompile Include="Core\Scripts\mainscript\scene_file.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\shaderloader.cpp" />
     <ClCompile Include="Core\Scripts\mainscript\window.cpp" />
     <ClCompile Include="Core\Resources\imgui\imgui.cpp" />
@@ -173,6 +175,7 @@ JPH_FLOATING_POINT_EXCEPTIONS_ENABLED;JPH_DEBUG_RENDERER;JPH_PROFILE_ENABLED;JPH
     <ClInclude Include="Core\Scripts\mainscript\physics.h" />
     <ClInclude Include="Core\Scripts\mainscript\physicsDefine.h" />
     <ClInclude Include="Core\Scripts\mainscript\robjloader.h" />
+    <ClInclude Include="Core\Scripts\mainscript\scene_file.h" />
     <ClInclude Include="Core\Scripts\mainscript\shaderloader.h" />
     <ClInclude Include="shaderloader.h" />
   </ItemGroup>

@@ -1,981 +1,913 @@
-/*
- * debugui.cpp  –  MecoWA Dear ImGui debug overlay
- *
- * Tabs
- * ────
- *   Scene      – scene objects, pos/rot routed through BodyInterface
- *   Physics    – per-link live state, editable pos/rot/vel + impulse applicator
- *   Bodies     – full Jolt body table: motion type, layer, friction, restitution,
- *                global wake/freeze/zero-vel, global friction/restitution override
- *   Collision  – Jolt DrawBodies flag toggles, shape colour mode selector,
- *                collision-layer matrix, per-body AABB table, active-body bar
- *   Simulation – pause / single-step / resume, sim-speed slider, gravity presets,
- *                gravity direction drag, solver stats, scene reset
- *   Engine     – camera speed/sensitivity/pitch/invert, air density, window info
- *   Render     – wireframe toggle, light direction, brightness, light strength
- *   Perf       – colour-coded FPS, frame-time line graph, FPS histogram
- *   Log        – in-app console (intercepts std::cout/cerr, filterable, clearable)
- *
- * Toggle: Alt+D
- * Single-step while paused (menu closed): Space
- *
- * Integration changes needed in window.cpp
- * ─────────────────────────────────────────
- *  1. Replace the `drawSettings` local variable with the exported reference:
- *       const JPH::BodyManager::DrawSettings& drawSettings = DebugUI_GetDrawSettings();
- *     (remove the old local JPH::BodyManager::DrawSettings drawSettings block)
- *
- *  2. Gate Physics_Update on pause/step/speed:
- *       if (!DebugUI_GetSimPaused())
- *           Physics_Update(deltaTime * DebugUI_GetSimSpeed());
- *       else if (DebugUI_ConsumeStep())
- *           Physics_Update(1.0f / 60.0f);
- *
- * Integration changes needed in debugui.h
- * ────────────────────────────────────────
- *  Add these declarations (below the existing ones):
- *
- *   #include <Jolt/Physics/Body/BodyManager.h>
- *   bool        DebugUI_GetSimPaused();
- *   float       DebugUI_GetSimSpeed();
- *   bool        DebugUI_ConsumeStep();
- *   const JPH::BodyManager::DrawSettings& DebugUI_GetDrawSettings();
- */
-
 #include "debugui.h"
-
-// ── ImGui ─────────────────────────────────────────────────────────────────────
-#include <imgui/imgui.h>
-#include <imgui/imgui_impl_glfw.h>
-#include <imgui/imgui_impl_opengl3.h>
-
-// ── Project ───────────────────────────────────────────────────────────────────
+#include "scene_file.h"
 #include "engine.h"
 #include "mecowa.h"
-#include "jolt_init.h"
-#include "jolt_bridge.h"
-#include "jolt_layers.h"
 
-// ── Jolt ──────────────────────────────────────────────────────────────────────
-#include <Jolt/Jolt.h>
-#include <Jolt/Physics/PhysicsSystem.h>
-#include <Jolt/Physics/PhysicsSettings.h>
-#include <Jolt/Physics/Body/BodyInterface.h>
-#include <Jolt/Physics/Body/Body.h>
-#include <Jolt/Physics/Body/BodyManager.h>
+#include <imgui/imgui.h>
 
-// ── GLM ───────────────────────────────────────────────────────────────────────
 #include <glm/glm/glm.hpp>
-#include <glm/glm/gtc/quaternion.hpp>
 
-// ── OpenGL / GLFW ─────────────────────────────────────────────────────────────
-#include <glfw/include/GLFW/glfw3.h>
-#include <glad/include/glad/glad.h>
-
-// ── Standard ──────────────────────────────────────────────────────────────────
 #include <string>
-#include <sstream>
-#include <streambuf>
-#include <deque>
 #include <vector>
-#include <algorithm>
 #include <cstring>
 #include <cstdio>
-#include <cmath>
-#include <mutex>
+#include <algorithm>
+#include <iostream>
 
-
-// ═════════════════════════════════════════════════════════════════════════════
-//  In-app log: redirects std::cout (white) and std::cerr (red) into the UI
-// ═════════════════════════════════════════════════════════════════════════════
-namespace AppLog {
-
-struct Entry { std::string text; ImVec4 col; };
-
-static std::deque<Entry>   lines;
-static std::mutex          mtx;
-bool                       autoScroll = true;
-static constexpr int       kMaxLines  = 512;
-
-static void Push(const std::string& s, ImVec4 col)
-{
-    std::lock_guard<std::mutex> lk(mtx);
-    std::istringstream ss(s);
-    std::string ln;
-    while (std::getline(ss, ln)) {
-        if (ln.empty()) continue;
-        lines.push_back({ln, col});
-        if ((int)lines.size() > kMaxLines) lines.pop_front();
-    }
-}
-
-void Clear() { std::lock_guard<std::mutex> lk(mtx); lines.clear(); }
-
-// Stream buffer that funnels a stream into Push()
-class LogBuf : public std::streambuf {
-    std::string acc_;
-    ImVec4      col_;
-public:
-    explicit LogBuf(ImVec4 c) : col_(c) {}
-protected:
-    int overflow(int c) override {
-        if (c != EOF) {
-            acc_ += (char)c;
-            if (c == '\n') { Push(acc_, col_); acc_.clear(); }
-        }
-        return c;
-    }
-};
-
-static LogBuf*         coutBuf = nullptr;
-static LogBuf*         cerrBuf = nullptr;
-static std::streambuf* oldCout = nullptr;
-static std::streambuf* oldCerr = nullptr;
-
-void Install()
-{
-    coutBuf = new LogBuf({0.88f,0.90f,0.95f,1.f});   // white-ish
-    cerrBuf = new LogBuf({1.00f,0.40f,0.40f,1.f});   // red
-    oldCout = std::cout.rdbuf(coutBuf);
-    oldCerr = std::cerr.rdbuf(cerrBuf);
-}
-
-void Uninstall()
-{
-    if (oldCout) std::cout.rdbuf(oldCout);
-    if (oldCerr) std::cerr.rdbuf(oldCerr);
-    delete coutBuf; coutBuf = nullptr;
-    delete cerrBuf; cerrBuf = nullptr;
-}
-
-} // namespace AppLog
-
+// ─────────────────────────────────────────────────────────────────────────────
+//  Forward declarations for engine helpers (defined in engine.cpp)
+// ─────────────────────────────────────────────────────────────────────────────
+// void RegisterPhysics_Box   (ModelInstance&, const OBJData&, float mass,
+//                              float friction, float restitution,
+//                              bool originAtBottom, glm::vec3 boxsize);
+// void RegisterPhysics_Convex(ModelInstance&, float mass,
+//                              float friction, float restitution, bool originAtBottom);
 
 // ═════════════════════════════════════════════════════════════════════════════
 //  Module state
 // ═════════════════════════════════════════════════════════════════════════════
-namespace {
-
-bool  g_open      = false;
-float g_prevTime  = 0.0f;
-float g_deltaTime = 0.0f;
-
-std::deque<float> g_frameHistory;
-constexpr int     kHistorySize = 120;
-
-// Renderer
-bool  g_wireframe     = false;
-float g_lightDir[3]   = { -0.5f, -1.0f, -0.3f };
-float g_brightness    = 1.0f;
-float g_lightStrength = 1.0f;
-
-// Collision draw settings – exported to window.cpp
-JPH::BodyManager::DrawSettings g_drawSettings;
-
-// Simulation controls
-bool  g_simPaused  = false;
-bool  g_stepQueued = false;
-float g_simSpeed   = 1.0f;
-float g_gravVec[3] = { 0.f, -9.81f, 0.f };
-
-
-// ═════════════════════════════════════════════════════════════════════════════
-//  Style
-// ═════════════════════════════════════════════════════════════════════════════
-void ApplyMecoStyle()
+namespace SceneEd
 {
-    ImGuiStyle& s = ImGui::GetStyle();
-    s.WindowRounding    = 6.f; s.FrameRounding  = 4.f;
-    s.ScrollbarRounding = 4.f; s.GrabRounding   = 4.f;
-    s.FramePadding  = {6,4};   s.ItemSpacing    = {8,5};
 
-    ImVec4* c = s.Colors;
-    c[ImGuiCol_WindowBg]         = {0.08f,0.09f,0.12f,0.92f};
-    c[ImGuiCol_TitleBg]          = {0.10f,0.14f,0.22f,1.00f};
-    c[ImGuiCol_TitleBgActive]    = {0.14f,0.20f,0.35f,1.00f};
-    c[ImGuiCol_Header]           = {0.18f,0.28f,0.48f,0.80f};
-    c[ImGuiCol_HeaderHovered]    = {0.22f,0.36f,0.60f,0.90f};
-    c[ImGuiCol_HeaderActive]     = {0.26f,0.44f,0.72f,1.00f};
-    c[ImGuiCol_FrameBg]          = {0.14f,0.16f,0.22f,1.00f};
-    c[ImGuiCol_FrameBgHovered]   = {0.20f,0.24f,0.34f,1.00f};
-    c[ImGuiCol_FrameBgActive]    = {0.26f,0.32f,0.46f,1.00f};
-    c[ImGuiCol_SliderGrab]       = {0.34f,0.56f,0.90f,1.00f};
-    c[ImGuiCol_SliderGrabActive] = {0.44f,0.70f,1.00f,1.00f};
-    c[ImGuiCol_Button]           = {0.20f,0.30f,0.50f,0.80f};
-    c[ImGuiCol_ButtonHovered]    = {0.26f,0.40f,0.66f,1.00f};
-    c[ImGuiCol_ButtonActive]     = {0.32f,0.50f,0.82f,1.00f};
-    c[ImGuiCol_CheckMark]        = {0.50f,0.80f,1.00f,1.00f};
-    c[ImGuiCol_Text]             = {0.88f,0.90f,0.95f,1.00f};
-    c[ImGuiCol_TextDisabled]     = {0.40f,0.44f,0.52f,1.00f};
-    c[ImGuiCol_Separator]        = {0.22f,0.28f,0.40f,1.00f};
-    c[ImGuiCol_Tab]              = {0.12f,0.18f,0.28f,1.00f};
-    c[ImGuiCol_TabHovered]       = {0.24f,0.36f,0.58f,1.00f};
-    c[ImGuiCol_TabActive]        = {0.20f,0.30f,0.50f,1.00f};
-}
+    // ── File state ────────────────────────────────────────────────────────────────
+    static SceneFile    g_scene;
+    static char         g_pathBuf[512] = "scene.scn";
+    static bool         g_showSaveAsPopup = false;
+    static bool         g_showNewConfirm = false;
+    static bool         g_showLoadConfirm = false;
+    static char         g_pendingLoadPath[512] = {};
 
+    // ── Selection ─────────────────────────────────────────────────────────────────
+    static int          g_selObj = -1;   // selected object index
+    static int          g_selCol = -1;   // selected collider index (-1 = none)
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  Shared helpers
-// ═════════════════════════════════════════════════════════════════════════════
-bool BeginTwoColTable(const char* id, float w0 = 110.f)
-{
-    bool ok = ImGui::BeginTable(id, 2,
-        ImGuiTableFlags_BordersInnerV|ImGuiTableFlags_RowBg|
-        ImGuiTableFlags_SizingStretchProp);
-    if (ok) {
-        ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, w0);
-        ImGui::TableSetupColumn("Value",    ImGuiTableColumnFlags_WidthStretch);
-    }
-    return ok;
-}
+    // ── Status bar ────────────────────────────────────────────────────────────────
+    static char         g_status[256] = "Ready.";
+    static float        g_statusTimer = 0.f;
+    static bool         g_statusOk = true;
 
-PhysicsLink* FindLink(ModelInstance* inst)
-{
-    for (auto& lk : gPhysicsLinks)
-        if (lk.model == inst) return &lk;
-    return nullptr;
-}
+    // ── Drag-reorder state ────────────────────────────────────────────────────────
+    static int          g_dragSrc = -1;
 
-void PushToJolt(PhysicsLink& lk, const glm::vec3& pos, const glm::vec3& eulerDeg)
-{
-    if (!gPhysics) return;
-    glm::vec3  simPos = pos + lk.renderOffset;
-    glm::quat  gq     = glm::quat(glm::radians(eulerDeg));
-    gPhysics->GetBodyInterface().SetPositionAndRotation(
-        lk.body,
-        JPH::RVec3(simPos.x, simPos.y, simPos.z),
-        JPH::Quat(gq.x, gq.y, gq.z, gq.w),
-        JPH::EActivation::Activate);
-}
-
-const char* MotionName(JPH::EMotionType t)
-{
-    switch(t){
-        case JPH::EMotionType::Static:    return "Static";
-        case JPH::EMotionType::Kinematic: return "Kinematic";
-        case JPH::EMotionType::Dynamic:   return "Dynamic";
-        default: return "?";
-    }
-}
-
-ImVec4 MotionColor(JPH::EMotionType t)
-{
-    switch(t){
-        case JPH::EMotionType::Static:    return {0.50f,0.50f,0.55f,1.f};
-        case JPH::EMotionType::Kinematic: return {0.30f,0.70f,1.00f,1.f};
-        case JPH::EMotionType::Dynamic:   return {0.40f,1.00f,0.50f,1.f};
-        default: return {1.f,1.f,1.f,1.f};
-    }
-}
-
-
-// ═════════════════════════════════════════════════════════════════════════════
-//  Tab: Scene Objects
-// ═════════════════════════════════════════════════════════════════════════════
-void PanelSceneObjects()
-{
-    if (sceneModels.empty()) { ImGui::TextDisabled("No scene objects."); return; }
-
-    int idx = 0;
-    for (auto& obj : sceneModels)
+    static void SetStatus(const char* msg, bool ok = true)
     {
-        ModelInstance& inst = obj.instance;
-        PhysicsLink*   lk   = FindLink(&inst);
+        snprintf(g_status, sizeof(g_status), "%s", msg);
+        g_statusOk = ok;
+        g_statusTimer = 5.f;
+    }
 
-        char lbl[128];
-        snprintf(lbl, sizeof(lbl), "[%d] %s%s",
-                 idx++, obj.name.c_str(), lk ? "  [phys]" : "");
+    // ─────────────────────────────────────────────────────────────────────────────
+    //  Helpers
+    // ─────────────────────────────────────────────────────────────────────────────
 
-        if (!ImGui::TreeNodeEx(lbl, ImGuiTreeNodeFlags_SpanFullWidth)) continue;
-
-        if (BeginTwoColTable("##sc"))
+    // Clamp selection after deletion / reorder
+    static void ClampSel()
+    {
+        int n = (int)g_scene.objects.size();
+        if (g_selObj >= n) g_selObj = n - 1;
+        if (g_selObj < 0 && n > 0) g_selObj = 0;
+        if (n == 0) { g_selObj = -1; g_selCol = -1; }
+        else
         {
-            // Position
-            {
-                glm::vec3 ep = inst.position;
-                ImGui::TableNextRow();
-                ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Position");
-                ImGui::TableSetColumnIndex(1);
-                ImGui::PushID("sp"); ImGui::SetNextItemWidth(-1);
-                if (ImGui::DragFloat3("##p",&ep.x,0.01f,-1e4f,1e4f,"%.3f"))
-                { if (lk) PushToJolt(*lk,ep,inst.rotation); else inst.position=ep; }
-                ImGui::PopID();
-            }
-            // Rotation
-            {
-                glm::vec3 er = inst.rotation;
-                ImGui::TableNextRow();
-                ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Rotation");
-                ImGui::TableSetColumnIndex(1);
-                ImGui::PushID("sr"); ImGui::SetNextItemWidth(-1);
-                if (ImGui::DragFloat3("##r",&er.x,0.1f,-360.f,360.f,"%.2f"))
-                { if (lk) PushToJolt(*lk,inst.position,er); else inst.rotation=er; }
-                ImGui::PopID();
-            }
-            // Scale
-            {
-                ImGui::TableNextRow();
-                ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Scale");
-                ImGui::TableSetColumnIndex(1);
-                ImGui::PushID("ss"); ImGui::SetNextItemWidth(-1);
-                ImGui::DragFloat3("##s",&inst.scale.x,0.005f,0.001f,100.f,"%.3f");
-                ImGui::PopID();
-            }
-            // Info
-            ImGui::TableNextRow();
-            ImGui::TableSetColumnIndex(0); ImGui::TextDisabled("Vertices");
-            ImGui::TableSetColumnIndex(1); ImGui::Text("%d", inst.vertexCount);
-            ImGui::TableNextRow();
-            ImGui::TableSetColumnIndex(0); ImGui::TextDisabled("Triangles");
-            ImGui::TableSetColumnIndex(1); ImGui::Text("%d", inst.indiciesCount);
-            ImGui::EndTable();
+            int nc = (int)g_scene.objects[g_selObj].colliders.size();
+            if (g_selCol >= nc) g_selCol = nc - 1;
         }
-        if (lk) ImGui::TextDisabled("Body ID: %u", lk->body.GetIndex());
-        ImGui::TreePop();
     }
-}
 
-
-// ═════════════════════════════════════════════════════════════════════════════
-//  Tab: Physics  (per-link live data + impulse)
-// ═════════════════════════════════════════════════════════════════════════════
-void PanelPhysics()
-{
-    if (!gPhysics) { ImGui::TextColored({1,.4f,.4f,1},"Jolt not initialised."); return; }
-
-    ImGui::Text("Bodies: %u total | %u active",
-        gPhysics->GetNumBodies(),
-        gPhysics->GetNumActiveBodies(JPH::EBodyType::RigidBody));
-    ImGui::Separator();
-
-    if (gPhysicsLinks.empty()) { ImGui::TextDisabled("No physics links."); return; }
-
-    JPH::BodyInterface& bi = gPhysics->GetBodyInterface();
-    int idx = 0;
-    for (auto& lk : gPhysicsLinks)
+    // Build a list of valid parent names (all objects except current)
+    static std::vector<std::string> ValidParents(int selfIdx)
     {
-        const char* name = "body";
-        for (auto& obj : sceneModels)
-            if (&obj.instance == lk.model) { name = obj.name.c_str(); break; }
+        std::vector<std::string> v;
+        v.push_back("none");
+        for (int i = 0; i < (int)g_scene.objects.size(); ++i)
+            if (i != selfIdx)
+                v.push_back(g_scene.objects[i].name);
+        return v;
+    }
 
-        char lbl[128];
-        snprintf(lbl,sizeof(lbl),"[%d] %s  (ID %u)",idx++,name,lk.body.GetIndex());
-        if (!ImGui::TreeNodeEx(lbl,ImGuiTreeNodeFlags_SpanFullWidth)) continue;
+    // Spawn a SceneObject into the live engine scene
+    static void SpawnObject(const SceneObject& o)
+    {
+        OBJData objData;
+        std::string mp = o.modelPath;
+        for (auto& c : mp) if (c == '/') c = '\\';
 
-        bool active = bi.IsActive(lk.body);
-        ImGui::PushStyleColor(ImGuiCol_Text,
-            active ? ImVec4{.4f,1.f,.5f,1.f} : ImVec4{.5f,.5f,.55f,1.f});
-        ImGui::Text(active ? "● Active" : "○ Sleeping");
-        ImGui::PopStyleColor();
+        ModelInstance& inst = CreateObject(
+            mp, objData, o.name,
+            glm::vec3(o.x, o.y, o.z),
+            glm::vec3(o.rx, o.ry, o.rz),
+            glm::vec3(o.sx, o.sy, o.sz));
 
-        JPH::Vec3 jP = bi.GetPosition(lk.body);
-        JPH::Quat jR = bi.GetRotation(lk.body);
-        JPH::Vec3 lv = bi.GetLinearVelocity(lk.body);
-        JPH::Vec3 av = bi.GetAngularVelocity(lk.body);
+        // Determine physics registration from colliders
+        bool hasBox = false;
+        bool hasConvex = false;
+        glm::vec3 boxHalf = { o.sx * 0.5f, o.sy * 0.5f, o.sz * 0.5f };
+        float friction = 0.5f;
+        float restitution = 0.1f;
 
-        glm::vec3 euler = glm::degrees(glm::eulerAngles(
-            glm::quat(jR.GetW(),jR.GetX(),jR.GetY(),jR.GetZ())));
-        glm::vec3 rPos  = glm::vec3(jP.GetX(),jP.GetY(),jP.GetZ()) - lk.renderOffset;
-
-        if (BeginTwoColTable("##ph"))
+        for (const auto& col : o.colliders)
         {
-            // Editable position
+            if (!col.enabled || col.isTrigger) continue;
+            if (col.friction >= 0.f) friction = col.friction;
+            if (col.restitution >= 0.f) restitution = col.restitution;
+
+            switch (col.shape)
             {
-                glm::vec3 ep = rPos;
-                ImGui::TableNextRow();
-                ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Position");
-                ImGui::TableSetColumnIndex(1);
-                ImGui::PushID("jp"); ImGui::SetNextItemWidth(-1);
-                if (ImGui::DragFloat3("##jp",&ep.x,0.01f,-1e4f,1e4f,"%.3f"))
-                    PushToJolt(lk,ep,euler);
-                ImGui::PopID();
+            case ColliderShape::Box:
+                hasBox = true;
+                boxHalf = { col.sx, col.sy, col.sz };
+                break;
+            case ColliderShape::ConvexHull:
+            case ColliderShape::TriangleMesh:
+            case ColliderShape::Sphere:
+            case ColliderShape::Capsule:
+                hasConvex = true;
+                break;
             }
-            // Editable rotation
-            {
-                glm::vec3 er = euler;
-                ImGui::TableNextRow();
-                ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Rotation");
-                ImGui::TableSetColumnIndex(1);
-                ImGui::PushID("jr"); ImGui::SetNextItemWidth(-1);
-                if (ImGui::DragFloat3("##jr",&er.x,0.1f,-360.f,360.f,"%.2f"))
-                    PushToJolt(lk,rPos,er);
-                ImGui::PopID();
-            }
-            // Editable linear velocity
-            {
-                float v3[3]={lv.GetX(),lv.GetY(),lv.GetZ()};
-                ImGui::TableNextRow();
-                ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Lin vel");
-                ImGui::TableSetColumnIndex(1);
-                ImGui::PushID("lv"); ImGui::SetNextItemWidth(-1);
-                if (ImGui::DragFloat3("##lv",v3,0.1f,-500.f,500.f,"%.2f"))
-                    bi.SetLinearVelocity(lk.body,JPH::Vec3(v3[0],v3[1],v3[2]));
-                ImGui::PopID();
-            }
-            // Editable angular velocity
-            {
-                float v3[3]={av.GetX(),av.GetY(),av.GetZ()};
-                ImGui::TableNextRow();
-                ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Ang vel");
-                ImGui::TableSetColumnIndex(1);
-                ImGui::PushID("av"); ImGui::SetNextItemWidth(-1);
-                if (ImGui::DragFloat3("##av",v3,0.1f,-500.f,500.f,"%.2f"))
-                    bi.SetAngularVelocity(lk.body,JPH::Vec3(v3[0],v3[1],v3[2]));
-                ImGui::PopID();
-            }
-            float spd = std::sqrt(lv.GetX()*lv.GetX()+lv.GetY()*lv.GetY()+lv.GetZ()*lv.GetZ());
-            ImGui::TableNextRow();
-            ImGui::TableSetColumnIndex(0); ImGui::TextDisabled("Speed");
-            ImGui::TableSetColumnIndex(1); ImGui::Text("%.3f m/s", spd);
-            ImGui::EndTable();
         }
 
-        // Impulse applicator
-        if (ImGui::TreeNode("Apply Impulse##imp"))
+        float mass = o.weight > 0.f ? o.weight : 1.f;
+
+        if (o.isStatic)
         {
-            static float imp[3] = {0.f,5.f,0.f};
-            ImGui::SetNextItemWidth(220);
-            ImGui::DragFloat3("N·s", imp, 0.1f, -1000.f, 1000.f, "%.2f");
-            if (ImGui::Button("Apply at COM"))
-            { bi.AddImpulse(lk.body,JPH::Vec3(imp[0],imp[1],imp[2])); bi.ActivateBody(lk.body); }
+            RegisterPhysics_Box(inst, objData, 0.f, friction, restitution,
+                false, glm::vec3(o.sx, o.sy, o.sz));
+        }
+        else if (hasConvex || (!hasBox && !hasConvex))
+        {
+            RegisterPhysics_Convex(inst, mass, friction, restitution, false);
+        }
+        else
+        {
+            RegisterPhysics_Box(inst, objData, mass, friction, restitution,
+                false, boxHalf * 2.f);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    //  File operations
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    static void DoNew()
+    {
+        g_scene.Clear();
+        g_scene.currentPath.clear();
+        g_scene.MarkClean();
+        snprintf(g_pathBuf, sizeof(g_pathBuf), "scene.scn");
+        g_selObj = g_selCol = -1;
+        SetStatus("New scene created.", true);
+    }
+
+    static void DoLoad(const char* path)
+    {
+        if (g_scene.Load(path))
+        {
+            snprintf(g_pathBuf, sizeof(g_pathBuf), "%s", path);
+            g_scene.MarkClean();
+            g_selObj = g_scene.objects.empty() ? -1 : 0;
+            g_selCol = -1;
+            char msg[288];
+            snprintf(msg, sizeof(msg), "Loaded %zu object(s) from '%s'.",
+                g_scene.objects.size(), path);
+            SetStatus(msg, true);
+        }
+        else
+        {
+            char msg[288];
+            snprintf(msg, sizeof(msg), "Failed to load '%s'.", path);
+            SetStatus(msg, false);
+        }
+    }
+
+    static void DoSave(const char* path)
+    {
+        if (g_scene.Save(path))
+        {
+            snprintf(g_pathBuf, sizeof(g_pathBuf), "%s", path);
+            g_scene.currentPath = path;
+            g_scene.MarkClean();
+            char msg[288];
+            snprintf(msg, sizeof(msg), "Saved %zu object(s) to '%s'.",
+                g_scene.objects.size(), path);
+            SetStatus(msg, true);
+        }
+        else
+        {
+            char msg[288];
+            snprintf(msg, sizeof(msg), "Failed to save '%s'.", path);
+            SetStatus(msg, false);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    //  Toolbar
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    static void DrawToolbar()
+    {
+        bool modified = g_scene.IsModified();
+
+        // ── New ──────────────────────────────────────────────────────────────────
+        if (ImGui::Button("New"))
+        {
+            if (modified) g_showNewConfirm = true;
+            else          DoNew();
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Create a new empty scene");
+
+        ImGui::SameLine();
+
+        // ── Load ─────────────────────────────────────────────────────────────────
+        if (ImGui::Button("Load"))
+        {
+            if (modified)
+            {
+                snprintf(g_pendingLoadPath, sizeof(g_pendingLoadPath), "%s", g_pathBuf);
+                g_showLoadConfirm = true;
+            }
+            else DoLoad(g_pathBuf);
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Load scene from path in text box");
+
+        ImGui::SameLine();
+
+        // ── Save ─────────────────────────────────────────────────────────────────
+        if (ImGui::Button("Save"))
+        {
+            if (g_scene.currentPath.empty())
+                g_showSaveAsPopup = true;
+            else
+                DoSave(g_scene.currentPath.c_str());
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Save to current path  (Ctrl+S)");
+
+        ImGui::SameLine();
+
+        // ── Save As ───────────────────────────────────────────────────────────────
+        if (ImGui::Button("Save As"))
+            g_showSaveAsPopup = true;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Save scene to a new file");
+
+        ImGui::SameLine(0, 20);
+
+        // ── Path box ──────────────────────────────────────────────────────────────
+        float remaining = ImGui::GetContentRegionAvail().x;
+        ImGui::SetNextItemWidth(remaining > 10.f ? remaining : 200.f);
+        ImGui::InputText("##scnpath", g_pathBuf, sizeof(g_pathBuf));
+
+        // ── Modified indicator ────────────────────────────────────────────────────
+        if (modified)
+        {
             ImGui::SameLine();
-            if (ImGui::Button("Launch up"))
-            { bi.AddImpulse(lk.body,JPH::Vec3(0.f,std::abs(imp[1]),0.f)); bi.ActivateBody(lk.body); }
-            ImGui::TreePop();
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4{ 1.f, 0.7f, 0.2f, 1.f });
+            ImGui::TextUnformatted("●");
+            ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Unsaved changes");
         }
-
-        if (ImGui::SmallButton("Wake"))   bi.ActivateBody(lk.body);
-        ImGui::SameLine();
-        if (ImGui::SmallButton("Freeze")) bi.DeactivateBody(lk.body);
-        ImGui::SameLine();
-        if (ImGui::SmallButton("Zero vel"))
-        { bi.SetLinearVelocity(lk.body,JPH::Vec3::sZero());
-          bi.SetAngularVelocity(lk.body,JPH::Vec3::sZero()); }
-
-        ImGui::TreePop();
     }
-}
 
+    // ─────────────────────────────────────────────────────────────────────────────
+    //  Scene action buttons (Apply / Capture)
+    // ─────────────────────────────────────────────────────────────────────────────
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  Tab: Bodies – full table + bulk actions
-// ═════════════════════════════════════════════════════════════════════════════
-void PanelBodies()
-{
-    if (!gPhysics) { ImGui::TextColored({1,.4f,.4f,1},"Jolt not initialised."); return; }
-
-    JPH::BodyInterface& bi = gPhysics->GetBodyInterface();
-
-    ImGui::TextDisabled("%zu registered bodies", gPhysicsLinks.size());
-
-    static char filter[64] = {};
-    ImGui::SameLine(0,16); ImGui::SetNextItemWidth(160);
-    ImGui::InputText("Filter##bf", filter, sizeof(filter));
-    ImGui::Separator();
-
-    if (ImGui::BeginTable("##bt", 6,
-        ImGuiTableFlags_BordersOuter|ImGuiTableFlags_BordersInnerV|
-        ImGuiTableFlags_RowBg|ImGuiTableFlags_ScrollY|ImGuiTableFlags_Resizable,
-        ImVec2(0,250)))
+    static void DrawSceneActions()
     {
-        ImGui::TableSetupScrollFreeze(0,1);
-        ImGui::TableSetupColumn("ID",      ImGuiTableColumnFlags_WidthFixed, 34.f);
-        ImGui::TableSetupColumn("Name",    ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupColumn("Type",    ImGuiTableColumnFlags_WidthFixed, 74.f);
-        ImGui::TableSetupColumn("Layer",   ImGuiTableColumnFlags_WidthFixed, 40.f);
-        ImGui::TableSetupColumn("Frict.",  ImGuiTableColumnFlags_WidthFixed, 54.f);
-        ImGui::TableSetupColumn("Rest.",   ImGuiTableColumnFlags_WidthFixed, 54.f);
-        ImGui::TableHeadersRow();
+        ImGui::Spacing();
+        ImGui::SeparatorText("Scene Actions");
 
-        for (auto& lk : gPhysicsLinks)
+        // Apply
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.18f, 0.44f, 0.18f, 1.f });
+        if (ImGui::Button("Apply All to Scene"))
         {
-            const char* name = "body";
-            for (auto& obj : sceneModels)
-                if (&obj.instance == lk.model) { name=obj.name.c_str(); break; }
-
-            if (filter[0] && std::string(name).find(filter)==std::string::npos) continue;
-
-            JPH::EMotionType mt = bi.GetMotionType(lk.body);
-            JPH::ObjectLayer ol = bi.GetObjectLayer(lk.body);
-            float fr=0.f, re=0.f;
+            int spawned = 0;
+            for (const auto& o : g_scene.objects)
             {
-                JPH::BodyLockRead lock(gPhysics->GetBodyLockInterface(), lk.body);
-                if (lock.Succeeded())
-                { fr=lock.GetBody().GetFriction(); re=lock.GetBody().GetRestitution(); }
+                SpawnObject(o); ++spawned;
             }
-
-            ImGui::TableNextRow();
-            ImGui::TableSetColumnIndex(0); ImGui::Text("%u",lk.body.GetIndex());
-            ImGui::TableSetColumnIndex(1);
-            ImGui::PushStyleColor(ImGuiCol_Text,MotionColor(mt));
-            ImGui::TextUnformatted(name);
-            ImGui::PopStyleColor();
-            ImGui::TableSetColumnIndex(2);
-            ImGui::PushStyleColor(ImGuiCol_Text,MotionColor(mt));
-            ImGui::TextUnformatted(MotionName(mt));
-            ImGui::PopStyleColor();
-            ImGui::TableSetColumnIndex(3); ImGui::Text("%u",(unsigned)ol);
-            ImGui::TableSetColumnIndex(4); ImGui::Text("%.2f",fr);
-            ImGui::TableSetColumnIndex(5); ImGui::Text("%.2f",re);
+            char msg[128];
+            snprintf(msg, sizeof(msg), "Spawned %d object(s) into scene.", spawned);
+            SetStatus(msg, true);
         }
-        ImGui::EndTable();
-    }
-
-    ImGui::Spacing();
-    ImGui::SeparatorText("Bulk Actions");
-    if (ImGui::Button("Wake All"))
-        for (auto& lk:gPhysicsLinks) bi.ActivateBody(lk.body);
-    ImGui::SameLine();
-    if (ImGui::Button("Freeze All"))
-        for (auto& lk:gPhysicsLinks) bi.DeactivateBody(lk.body);
-    ImGui::SameLine();
-    if (ImGui::Button("Zero All Vel"))
-        for (auto& lk:gPhysicsLinks)
-        { bi.SetLinearVelocity(lk.body,JPH::Vec3::sZero());
-          bi.SetAngularVelocity(lk.body,JPH::Vec3::sZero()); }
-
-    ImGui::Spacing();
-    ImGui::SeparatorText("Global Property Override");
-    static float gFr=0.5f, gRe=0.1f;
-    bool ch = ImGui::SliderFloat("Friction##g",&gFr,0.f,1.f);
-    ch |=      ImGui::SliderFloat("Restitution##g",&gRe,0.f,1.f);
-    if (ch)
-        for (auto& lk:gPhysicsLinks)
-        {
-            JPH::BodyLockWrite lock(gPhysics->GetBodyLockInterface(),lk.body);
-            if (lock.Succeeded())
-            { lock.GetBody().SetFriction(gFr); lock.GetBody().SetRestitution(gRe); }
-        }
-}
-
-
-// ═════════════════════════════════════════════════════════════════════════════
-//  Tab: Collision
-// ═════════════════════════════════════════════════════════════════════════════
-void PanelCollision()
-{
-    if (!gPhysics) { ImGui::TextColored({1,.4f,.4f,1},"Jolt not initialised."); return; }
-
-    // ── Live active-body bar ───────────────────────────────────────────────────
-    unsigned active = gPhysics->GetNumActiveBodies(JPH::EBodyType::RigidBody);
-    unsigned total  = gPhysics->GetNumBodies();
-
-    ImGui::SeparatorText("Live Stats");
-    {
-        float frac = total ? (float)active/(float)total : 0.f;
-        char ovl[48]; snprintf(ovl,sizeof(ovl),"%u / %u bodies active",active,total);
-        ImGui::PushStyleColor(ImGuiCol_PlotHistogram,ImVec4{.3f,.7f,.4f,1.f});
-        ImGui::ProgressBar(frac,ImVec2(-1,0),ovl);
         ImGui::PopStyleColor();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Push all pending objects into the running simulation");
+
+        ImGui::SameLine();
+
+        // Capture
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.18f, 0.24f, 0.48f, 1.f });
+        if (ImGui::Button("Capture Live Scene"))
+        {
+            g_scene.Clear();
+            for (const auto& obj : sceneModels)
+            {
+                const ModelInstance& inst = obj.instance;
+                SceneObject so;
+                so.name = obj.name;
+                so.parent = "none";
+                so.modelPath = "Core/Resources/3dmodels/" + obj.name + ".obj";
+                so.texturePath = "none";
+                so.x = inst.position.x; so.y = inst.position.y; so.z = inst.position.z;
+                so.rx = inst.rotation.x; so.ry = inst.rotation.y; so.rz = inst.rotation.z;
+                so.sx = inst.scale.x;    so.sy = inst.scale.y;    so.sz = inst.scale.z;
+                so.isStatic = false;
+                so.weight = 0.f;
+                g_scene.objects.push_back(so);
+            }
+            g_selObj = g_scene.objects.empty() ? -1 : 0;
+            g_selCol = -1;
+            g_scene.MarkDirty();
+            char msg[128];
+            snprintf(msg, sizeof(msg), "Captured %zu live object(s).",
+                g_scene.objects.size());
+            SetStatus(msg, true);
+        }
+        ImGui::PopStyleColor();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Import the live simulation state into the editor");
     }
 
-    // ── DrawBodies toggles ─────────────────────────────────────────────────────
-    ImGui::Spacing();
-    ImGui::SeparatorText("Debug Draw Flags  (F3 = toggle overlay)");
-    ImGui::Columns(2,"##df",false);
+    // ─────────────────────────────────────────────────────────────────────────────
+    //  Object tree panel (left side)
+    // ─────────────────────────────────────────────────────────────────────────────
 
-    ImGui::Checkbox("Shape",              &g_drawSettings.mDrawShape);
-    ImGui::Checkbox("Shape wireframe",    &g_drawSettings.mDrawShapeWireframe);
-    ImGui::Checkbox("Bounding box",       &g_drawSettings.mDrawBoundingBox);
-    ImGui::Checkbox("Centre of mass",     &g_drawSettings.mDrawCenterOfMassTransform);
-    ImGui::Checkbox("World transform",    &g_drawSettings.mDrawWorldTransform);
-
-    ImGui::NextColumn();
-
-    ImGui::Checkbox("Velocity",           &g_drawSettings.mDrawVelocity);
-    ImGui::Checkbox("Mass & inertia",     &g_drawSettings.mDrawMassAndInertia);
-    ImGui::Checkbox("Sleep stats",        &g_drawSettings.mDrawSleepStats);
-    ImGui::Checkbox("Shape colour",       &g_drawSettings.mDrawShapeColor);
-
-    ImGui::Columns(1);
-
-    // Shape colour mode combo
-    ImGui::Spacing();
-    static const char* colorModes[] = {
-        "Instance","Shape type","Motion type","Sleep","Island","Material"
-    };
-    int cm = (int)g_drawSettings.mDrawShapeColor;
-    if (ImGui::BeginCombo("Shape colour mode", colorModes[cm]))
+    static void DrawObjectTree(float width)
     {
-        for (int i=0;i<6;++i)
-            if (ImGui::Selectable(colorModes[i],cm==i))
-                g_drawSettings.mDrawShapeColor=(JPH::BodyManager::EShapeColor)i;
-        ImGui::EndCombo();
+        ImGui::BeginGroup();
+
+        ImGui::SeparatorText("Objects");
+
+        // Add / Remove buttons
+        if (ImGui::SmallButton("+ Object"))
+        {
+            SceneObject o;
+            o.name = "Object_" + std::to_string(g_scene.objects.size());
+            o.modelPath = "Core/Resources/3dmodels/cube.obj";
+            g_scene.objects.push_back(o);
+            g_selObj = (int)g_scene.objects.size() - 1;
+            g_selCol = -1;
+            g_scene.MarkDirty();
+            SetStatus("Object added.", true);
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Dup.") && g_selObj >= 0)
+        {
+            SceneObject copy = g_scene.objects[g_selObj];
+            copy.name += "_copy";
+            g_scene.objects.insert(g_scene.objects.begin() + g_selObj + 1, copy);
+            g_selObj += 1;
+            g_scene.MarkDirty();
+            SetStatus("Object duplicated.", true);
+        }
+        ImGui::SameLine();
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.5f, 0.1f, 0.1f, 1.f });
+        if (ImGui::SmallButton("Del.") && g_selObj >= 0)
+        {
+            g_scene.objects.erase(g_scene.objects.begin() + g_selObj);
+            g_scene.MarkDirty();
+            ClampSel();
+            SetStatus("Object deleted.", true);
+        }
+        ImGui::PopStyleColor();
+
+        ImGui::Separator();
+
+        // Scrollable list
+        ImGui::BeginChild("##objtree", ImVec2(width, 0), false,
+            ImGuiWindowFlags_HorizontalScrollbar);
+
+        // Group objects by parent for a simple two-level tree
+        // Root objects (parent == "none") shown first; children indented
+        std::vector<int> roots, displayed;
+
+        for (int i = 0; i < (int)g_scene.objects.size(); ++i)
+            if (g_scene.objects[i].parent == "none")
+                roots.push_back(i);
+
+        // Draw root then children recursively (one level deep for simplicity)
+        std::function<void(int, int)> DrawNode = [&](int idx, int depth)
+            {
+                displayed.push_back(idx);
+                const auto& obj = g_scene.objects[idx];
+
+                // Indent
+                if (depth > 0)
+                    ImGui::Indent(14.f * (float)depth);
+
+                // Drag source for reordering
+                bool selected = (g_selObj == idx);
+
+                ImGui::PushID(idx);
+
+                char nodeLabel[128];
+                snprintf(nodeLabel, sizeof(nodeLabel),
+                    "%s%s%s",
+                    (obj.colliders.empty() ? "" : "▸ "),
+                    obj.name.c_str(),
+                    (obj.isStatic ? "  [S]" : ""));
+
+                // Selectable row
+                if (ImGui::Selectable(nodeLabel, selected,
+                    ImGuiSelectableFlags_AllowDoubleClick,
+                    ImVec2(0.f, 0.f)))
+                {
+                    g_selObj = idx;
+                    g_selCol = -1;
+                }
+
+                // Drag-reorder (same level only)
+                if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
+                {
+                    g_dragSrc = idx;
+                    ImGui::SetDragDropPayload("OBJ_IDX", &idx, sizeof(int));
+                    ImGui::Text("Move: %s", obj.name.c_str());
+                    ImGui::EndDragDropSource();
+                }
+                if (ImGui::BeginDragDropTarget())
+                {
+                    if (const ImGuiPayload* pl =
+                        ImGui::AcceptDragDropPayload("OBJ_IDX"))
+                    {
+                        int src = *(const int*)pl->Data;
+                        if (src != idx)
+                        {
+                            SceneObject moved = g_scene.objects[src];
+                            g_scene.objects.erase(g_scene.objects.begin() + src);
+                            int dst = idx < src ? idx : idx - 1;
+                            g_scene.objects.insert(
+                                g_scene.objects.begin() + dst, moved);
+                            g_selObj = dst;
+                            g_scene.MarkDirty();
+                        }
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+
+                // Colliders as sub-items (when this object is selected)
+                if (selected && !obj.colliders.empty())
+                {
+                    for (int ci = 0; ci < (int)obj.colliders.size(); ++ci)
+                    {
+                        ImGui::Indent(18.f);
+                        char cLabel[128];
+                        snprintf(cLabel, sizeof(cLabel), "⬡ %s [%s]%s",
+                            obj.colliders[ci].name.c_str(),
+                            ColliderShapeName(obj.colliders[ci].shape),
+                            obj.colliders[ci].isTrigger ? " *T*" : "");
+
+                        bool cSel = (g_selCol == ci);
+                        if (ImGui::Selectable(cLabel, cSel,
+                            0, ImVec2(0.f, 0.f)))
+                        {
+                            g_selCol = ci;
+                        }
+                        ImGui::Unindent(18.f);
+                    }
+                }
+
+                ImGui::PopID();
+
+                if (depth > 0)
+                    ImGui::Unindent(14.f * (float)depth);
+
+                // Draw children
+                for (int j = 0; j < (int)g_scene.objects.size(); ++j)
+                    if (j != idx && g_scene.objects[j].parent == obj.name)
+                        DrawNode(j, depth + 1);
+            };
+
+        for (int r : roots)
+            DrawNode(r, 0);
+
+        // Any object not yet displayed (orphan / unknown parent) shown at root
+        for (int i = 0; i < (int)g_scene.objects.size(); ++i)
+        {
+            if (std::find(displayed.begin(), displayed.end(), i) == displayed.end())
+                DrawNode(i, 0);
+        }
+
+        ImGui::EndChild(); // ##objtree
+        ImGui::EndGroup();
     }
 
-    // ── Layer matrix ───────────────────────────────────────────────────────────
-    ImGui::Spacing();
-    ImGui::SeparatorText("Collision Layer Matrix");
-    ImGui::TextDisabled("NON_MOVING=0   MOVING=1   (defined in jolt_init.cpp)");
+    // ─────────────────────────────────────────────────────────────────────────────
+    //  Collider inspector (inside the inspector panel)
+    // ─────────────────────────────────────────────────────────────────────────────
 
-    if (ImGui::BeginTable("##lm",3,
-        ImGuiTableFlags_BordersOuter|ImGuiTableFlags_BordersInner|ImGuiTableFlags_RowBg,
-        ImVec2(260,0)))
+    static void DrawColliderInspector(SceneCollider& c)
     {
-        ImGui::TableSetupColumn("",       ImGuiTableColumnFlags_WidthFixed,80.f);
-        ImGui::TableSetupColumn("Lyr 0",  ImGuiTableColumnFlags_WidthFixed,72.f);
-        ImGui::TableSetupColumn("Lyr 1",  ImGuiTableColumnFlags_WidthFixed,72.f);
-        ImGui::TableHeadersRow();
+        ImGui::SeparatorText("Collider");
 
-        auto Cell=[](bool collide){
-            collide ? ImGui::TextColored({.3f,1.f,.4f,1.f},"  YES")
-                    : ImGui::TextColored({.4f,.4f,.5f,1.f},"  —");
+        // Name
+        char nameBuf[64];
+        snprintf(nameBuf, sizeof(nameBuf), "%s", c.name.c_str());
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::InputText("Name##cn", nameBuf, sizeof(nameBuf)))
+            c.name = nameBuf;
+
+        // Shape selector
+        static const char* shapeNames[] = {
+            "Box", "Sphere", "Capsule", "ConvexHull", "TriangleMesh"
         };
+        int shapeIdx = (int)c.shape;
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::Combo("Shape##cs", &shapeIdx, shapeNames, 5))
+            c.shape = (ColliderShape)shapeIdx;
 
-        ImGui::TableNextRow();
-        ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Layer 0");
-        ImGui::TableSetColumnIndex(1); Cell(false);   // 0 vs 0
-        ImGui::TableSetColumnIndex(2); Cell(true);    // 0 vs 1
+        ImGui::Spacing();
 
-        ImGui::TableNextRow();
-        ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("Layer 1");
-        ImGui::TableSetColumnIndex(1); Cell(true);    // 1 vs 0
-        ImGui::TableSetColumnIndex(2); Cell(true);    // 1 vs 1
+        // Offset transform
+        ImGui::SeparatorText("Offset Transform");
 
-        ImGui::EndTable();
+        float pos[3] = { c.ox, c.oy, c.oz };
+        ImGui::Text("Position"); ImGui::SameLine(90);
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::DragFloat3("##cop", pos, 0.01f, -1e4f, 1e4f, "%.3f"))
+        {
+            c.ox = pos[0]; c.oy = pos[1]; c.oz = pos[2];
+        }
+
+        float rot[3] = { c.rx, c.ry, c.rz };
+        ImGui::Text("Rotation"); ImGui::SameLine(90);
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::DragFloat3("##cor", rot, 0.1f, -360.f, 360.f, "%.2f"))
+        {
+            c.rx = rot[0]; c.ry = rot[1]; c.rz = rot[2];
+        }
+
+        // Shape parameters
+        ImGui::Spacing();
+        ImGui::SeparatorText("Shape Parameters");
+        switch (c.shape)
+        {
+        case ColliderShape::Box:
+            ImGui::Text("Half-extents");
+            ImGui::SetNextItemWidth(-1);
+            ImGui::DragFloat3("##cbs", &c.sx, 0.005f, 0.001f, 100.f, "%.3f");
+            break;
+        case ColliderShape::Sphere:
+            ImGui::SetNextItemWidth(120);
+            ImGui::DragFloat("Radius##csr", &c.sx, 0.005f, 0.001f, 100.f, "%.3f");
+            break;
+        case ColliderShape::Capsule:
+            ImGui::SetNextItemWidth(120);
+            ImGui::DragFloat("Radius##ccr", &c.sx, 0.005f, 0.001f, 100.f, "%.3f");
+            ImGui::SetNextItemWidth(120);
+            ImGui::DragFloat("Half-height##cch", &c.sy, 0.005f, 0.001f, 100.f, "%.3f");
+            break;
+        case ColliderShape::ConvexHull:
+        case ColliderShape::TriangleMesh:
+            ImGui::TextDisabled("Built from parent mesh vertices.");
+            break;
+        }
+
+        // Material overrides
+        ImGui::Spacing();
+        ImGui::SeparatorText("Material Overrides  (-1 = inherit)");
+        ImGui::SetNextItemWidth(110);
+        ImGui::DragFloat("Friction##cf", &c.friction, 0.01f, -1.f, 1.f, "%.2f");
+        ImGui::SetNextItemWidth(110);
+        ImGui::DragFloat("Restitution##cr", &c.restitution, 0.01f, -1.f, 1.f, "%.2f");
+
+        // Flags
+        ImGui::Spacing();
+        ImGui::Checkbox("Trigger (sensor – no physics response)", &c.isTrigger);
+        ImGui::Checkbox("Enabled##ce", &c.enabled);
     }
 
-    // ── Per-body AABB ──────────────────────────────────────────────────────────
-    ImGui::Spacing();
-    ImGui::SeparatorText("Per-body World AABB");
+    // ─────────────────────────────────────────────────────────────────────────────
+    //  Object inspector panel (right side)
+    // ─────────────────────────────────────────────────────────────────────────────
 
-    if (ImGui::BeginTable("##aabb",3,
-        ImGuiTableFlags_BordersOuter|ImGuiTableFlags_BordersInnerV|
-        ImGuiTableFlags_RowBg|ImGuiTableFlags_ScrollY, ImVec2(0,130)))
+    static void DrawInspector()
     {
-        ImGui::TableSetupScrollFreeze(0,1);
-        ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupColumn("Min",  ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupColumn("Max",  ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableHeadersRow();
-
-        for (auto& lk:gPhysicsLinks)
+        if (g_selObj < 0 || g_selObj >= (int)g_scene.objects.size())
         {
-            const char* nm="body";
-            for (auto& obj:sceneModels) if(&obj.instance==lk.model){nm=obj.name.c_str();break;}
+            ImGui::TextDisabled("No object selected.");
+            return;
+        }
 
-            JPH::AABox bb;
+        SceneObject& o = g_scene.objects[g_selObj];
+        bool changed = false;
+
+        // ── Identity ─────────────────────────────────────────────────────────────
+        ImGui::SeparatorText("Identity");
+
+        char nameBuf[64];
+        snprintf(nameBuf, sizeof(nameBuf), "%s", o.name.c_str());
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::InputText("Name##on", nameBuf, sizeof(nameBuf)))
+        {
+            o.name = nameBuf; changed = true;
+        }
+
+        // Parent selector (combo)
+        auto parents = ValidParents(g_selObj);
+        int parentIdx = 0;
+        for (int i = 0; i < (int)parents.size(); ++i)
+            if (parents[i] == o.parent) { parentIdx = i; break; }
+
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::BeginCombo("Parent##op", parents[parentIdx].c_str()))
+        {
+            for (int i = 0; i < (int)parents.size(); ++i)
             {
-                JPH::BodyLockRead lock(gPhysics->GetBodyLockInterface(),lk.body);
-                if (!lock.Succeeded()) continue;
-                bb = lock.GetBody().GetWorldSpaceBounds();
+                bool sel = (i == parentIdx);
+                if (ImGui::Selectable(parents[i].c_str(), sel))
+                {
+                    o.parent = parents[i]; changed = true;
+                }
+                if (sel) ImGui::SetItemDefaultFocus();
             }
-            ImGui::TableNextRow();
-            ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted(nm);
-            ImGui::TableSetColumnIndex(1);
-            ImGui::Text("%.1f %.1f %.1f",bb.mMin.GetX(),bb.mMin.GetY(),bb.mMin.GetZ());
-            ImGui::TableSetColumnIndex(2);
-            ImGui::Text("%.1f %.1f %.1f",bb.mMax.GetX(),bb.mMax.GetY(),bb.mMax.GetZ());
+            ImGui::EndCombo();
         }
-        ImGui::EndTable();
-    }
-}
 
+        // ── Assets ───────────────────────────────────────────────────────────────
+        ImGui::Spacing();
+        ImGui::SeparatorText("Assets");
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  Tab: Simulation
-// ═════════════════════════════════════════════════════════════════════════════
-void PanelSimulation()
-{
-    // ── Playback ──────────────────────────────────────────────────────────────
-    ImGui::SeparatorText("Playback");
-
-    if (g_simPaused)
-    {
-        ImGui::PushStyleColor(ImGuiCol_Button,{.5f,.2f,.2f,1.f});
-        if (ImGui::Button("▶  Resume")) g_simPaused=false;
-        ImGui::PopStyleColor();
-        ImGui::SameLine();
-        if (ImGui::Button("⏭  Step once")) g_stepQueued=true;
-        ImGui::SameLine();
-        ImGui::TextDisabled("(Space also steps)");
-    }
-    else
-    {
-        ImGui::PushStyleColor(ImGuiCol_Button,{.2f,.45f,.2f,1.f});
-        if (ImGui::Button("⏸  Pause")) g_simPaused=true;
-        ImGui::PopStyleColor();
-    }
-
-    ImGui::Spacing();
-    ImGui::SliderFloat("Sim speed", &g_simSpeed, 0.01f, 4.f, "%.2f×");
-    if (ImGui::Button("1×")) g_simSpeed=1.f;
-    ImGui::SameLine(); if (ImGui::Button("½×")) g_simSpeed=0.5f;
-    ImGui::SameLine(); if (ImGui::Button("2×")) g_simSpeed=2.f;
-
-    // ── Gravity ───────────────────────────────────────────────────────────────
-    ImGui::Spacing();
-    ImGui::SeparatorText("Gravity Vector");
-
-    bool gc = ImGui::DragFloat3("X / Y / Z", g_gravVec, 0.05f, -50.f, 50.f, "%.3f");
-
-    if (ImGui::SmallButton("Earth"))
-        { g_gravVec[0]=0;g_gravVec[1]=-9.81f;g_gravVec[2]=0; gc=true; }
-    ImGui::SameLine();
-    if (ImGui::SmallButton("Moon"))
-        { g_gravVec[0]=0;g_gravVec[1]=-1.62f;g_gravVec[2]=0; gc=true; }
-    ImGui::SameLine();
-    if (ImGui::SmallButton("Mars"))
-        { g_gravVec[0]=0;g_gravVec[1]=-3.72f;g_gravVec[2]=0; gc=true; }
-    ImGui::SameLine();
-    if (ImGui::SmallButton("Zero-G"))
-        { g_gravVec[0]=0;g_gravVec[1]=0;g_gravVec[2]=0; gc=true; }
-    ImGui::SameLine();
-    if (ImGui::SmallButton("Flip Y"))
-        { g_gravVec[1]=-g_gravVec[1]; gc=true; }
-
-    if (gc && gPhysics)
-        gPhysics->SetGravity(JPH::Vec3(g_gravVec[0],g_gravVec[1],g_gravVec[2]));
-
-    // ── Solver info ────────────────────────────────────────────────────────────
-    ImGui::Spacing();
-    ImGui::SeparatorText("Solver  (read-only)");
-    if (gPhysics)
-    {
-        const JPH::PhysicsSettings& ps = gPhysics->GetPhysicsSettings();
-        ImGui::Text("Velocity steps : %u", ps.mNumVelocitySteps);
-        ImGui::Text("Position steps : %u", ps.mNumPositionSteps);
-        ImGui::TextDisabled("Edit via gPhysics->SetPhysicsSettings()");
-    }
-
-    // ── Scene reset ────────────────────────────────────────────────────────────
-    ImGui::Spacing();
-    ImGui::SeparatorText("Quick Reset");
-    ImGui::PushStyleColor(ImGuiCol_Button,{.5f,.1f,.1f,1.f});
-    if (ImGui::Button("Zero all velocities") && gPhysics)
-    {
-        JPH::BodyInterface& bi = gPhysics->GetBodyInterface();
-        for (auto& lk:gPhysicsLinks)
-        { bi.SetLinearVelocity(lk.body,JPH::Vec3::sZero());
-          bi.SetAngularVelocity(lk.body,JPH::Vec3::sZero()); }
-    }
-    ImGui::PopStyleColor();
-}
-
-
-// ═════════════════════════════════════════════════════════════════════════════
-//  Tab: Engine / Camera
-// ═════════════════════════════════════════════════════════════════════════════
-void PanelEngineSettings()
-{
-    ImGui::SeparatorText("Camera");
-    ImGui::SliderFloat("Speed",       &cameraSpeed,       0.1f, 50.f);
-    ImGui::SliderFloat("Sensitivity", &cameraSensitivity, 0.01f, 1.f);
-    ImGui::SliderFloat("Pitch clamp", &cameraPitchClamp,  10.f, 89.f);
-    ImGui::Checkbox("Invert Mouse Y", &invertMouseY);
-    ImGui::Checkbox("Invert Mouse X", &invertMouseX);
-
-    ImGui::Spacing();
-    ImGui::SeparatorText("Environment");
-    ImGui::DragFloat("Air density",&airDensity,0.001f,0.f,10.f,"%.4f kg/m³");
-
-    ImGui::Spacing();
-    ImGui::SeparatorText("Window");
-    ImGui::Text("Resolution : %d × %d", windowWidth, windowHeight);
-    ImGui::Text("Version    : %s",       version.c_str());
-}
-
-
-// ═════════════════════════════════════════════════════════════════════════════
-//  Tab: Renderer
-// ═════════════════════════════════════════════════════════════════════════════
-void PanelRenderer()
-{
-    ImGui::SeparatorText("Geometry");
-    if (ImGui::Checkbox("Wireframe",&g_wireframe))
-        glPolygonMode(GL_FRONT_AND_BACK, g_wireframe ? GL_LINE : GL_FILL);
-
-    ImGui::Spacing();
-    ImGui::SeparatorText("Lighting");
-    ImGui::SliderFloat3("Light dir",   g_lightDir,    -1.f, 1.f);
-    ImGui::SliderFloat("Brightness",  &g_brightness,   0.f, 5.f);
-    ImGui::SliderFloat("Light str.",  &g_lightStrength, 0.f, 5.f);
-
-    ImGui::Spacing();
-    ImGui::TextDisabled("Uniforms to set each frame:");
-    ImGui::TextDisabled("  shader.setVec3(\"lightDir\", {%.2f,%.2f,%.2f})",
-        g_lightDir[0],g_lightDir[1],g_lightDir[2]);
-    ImGui::TextDisabled("  shader.setFloat(\"brightness\",    %.3f)", g_brightness);
-    ImGui::TextDisabled("  shader.setFloat(\"lightStrength\", %.3f)", g_lightStrength);
-}
-
-
-// ═════════════════════════════════════════════════════════════════════════════
-//  Tab: Performance
-// ═════════════════════════════════════════════════════════════════════════════
-void PanelPerformance()
-{
-    float fps = g_deltaTime>0.f ? 1.f/g_deltaTime : 0.f;
-
-    ImVec4 fc = fps>55.f ? ImVec4{.3f,1.f,.4f,1.f}
-              : fps>30.f ? ImVec4{1.f,.9f,.2f,1.f}
-                         : ImVec4{1.f,.3f,.3f,1.f};
-    ImGui::PushStyleColor(ImGuiCol_Text,fc);
-    ImGui::Text("FPS:  %.1f", fps);
-    ImGui::PopStyleColor();
-    ImGui::Text("Frame time:  %.2f ms", g_deltaTime*1000.f);
-
-    // Rolling history
-    g_frameHistory.push_back(g_deltaTime*1000.f);
-    while ((int)g_frameHistory.size()>kHistorySize) g_frameHistory.pop_front();
-
-    static float ftBuf[kHistorySize]={};
-    static float fpsBuf[kHistorySize]={};
-    int n=(int)g_frameHistory.size();
-    for(int i=0;i<n;++i){ ftBuf[i]=g_frameHistory[i]; fpsBuf[i]=(ftBuf[i]>0.f?1000.f/ftBuf[i]:0.f); }
-
-    float mxFt=*std::max_element(ftBuf,ftBuf+std::max(n,1));
-    mxFt=std::max(mxFt,33.3f);
-    char ovl[32]; snprintf(ovl,sizeof(ovl),"%.1f ms",g_deltaTime*1000.f);
-
-    ImGui::SeparatorText("Frame time (ms)");
-    ImGui::PlotLines("##ft",ftBuf,n,0,ovl,0.f,mxFt,{0.f,55.f});
-
-    ImGui::SeparatorText("FPS");
-    ImGui::PlotHistogram("##fps",fpsBuf,n,0,nullptr,0.f,200.f,{0.f,40.f});
-
-    ImGui::Spacing();
-    ImGui::SeparatorText("Jolt");
-    if(gPhysics){
-        ImGui::Text("Active bodies : %u",
-            gPhysics->GetNumActiveBodies(JPH::EBodyType::RigidBody));
-        ImGui::Text("Total bodies  : %u", gPhysics->GetNumBodies());
-    } else ImGui::TextDisabled("Jolt not running.");
-}
-
-
-// ═════════════════════════════════════════════════════════════════════════════
-//  Tab: Log console
-// ═════════════════════════════════════════════════════════════════════════════
-void PanelLog()
-{
-    if (ImGui::SmallButton("Clear")) AppLog::Clear();
-    ImGui::SameLine();
-    ImGui::Checkbox("Auto-scroll",&AppLog::autoScroll);
-
-    static char logFilt[64]={};
-    ImGui::SameLine(); ImGui::SetNextItemWidth(160);
-    ImGui::InputText("Filter##lf",logFilt,sizeof(logFilt));
-    ImGui::Separator();
-
-    ImGui::BeginChild("##ls",ImVec2(0,0),false,ImGuiWindowFlags_HorizontalScrollbar);
-    {
-        std::lock_guard<std::mutex> guard(AppLog::mtx);
-        std::string flt(logFilt);
-        for(auto& e:AppLog::lines){
-            if(!flt.empty()&&e.text.find(flt)==std::string::npos) continue;
-            ImGui::PushStyleColor(ImGuiCol_Text,e.col);
-            ImGui::TextUnformatted(e.text.c_str());
-            ImGui::PopStyleColor();
-        }
-    }
-    if(AppLog::autoScroll && ImGui::GetScrollY()>=ImGui::GetScrollMaxY())
-        ImGui::SetScrollHereY(1.f);
-    ImGui::EndChild();
-}
-
-} // anonymous namespace
-
-
-// ═════════════════════════════════════════════════════════════════════════════
-//  Public API
-// ═════════════════════════════════════════════════════════════════════════════
-
-void DebugUI_Init(GLFWwindow* window)
-{
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO& io = ImGui::GetIO();
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-    io.IniFilename  = nullptr;
-    ApplyMecoStyle();
-    ImGui_ImplGlfw_InitForOpenGL(window,true);
-    ImGui_ImplOpenGL3_Init("#version 330");
-
-    AppLog::Install();   // redirect cout/cerr into the Log tab
-
-    // Sensible draw-settings defaults
-    g_drawSettings.mDrawShape          = true;
-    g_drawSettings.mDrawShapeWireframe = true;
-    g_drawSettings.mDrawBoundingBox    = false;
-    g_drawSettings.mDrawVelocity       = false;
-    g_drawSettings.mDrawMassAndInertia = false;
-    g_drawSettings.mDrawSleepStats     = false;
-    g_drawSettings.mDrawShapeColor     = JPH::BodyManager::EShapeColor::MotionTypeColor;
-
-    // Sync gravity display
-    g_gravVec[0]=0.f; g_gravVec[1]=gravityG; g_gravVec[2]=0.f;
-}
-
-void DebugUI_Render()
-{
-    float now=static_cast<float>(glfwGetTime());
-    g_deltaTime=now-g_prevTime; g_prevTime=now;
-
-    if (!g_open) return;
-
-    ImGui_ImplOpenGL3_NewFrame();
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();
-
-    ImGui::SetNextWindowSize({600,700},ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowPos ({20,20}, ImGuiCond_FirstUseEver);
-
-    if (ImGui::Begin("MecoWA  —  Debug  (Alt+D)",&g_open,ImGuiWindowFlags_NoCollapse))
-    {
-        if (g_simPaused)
+        char mpBuf[256];
+        snprintf(mpBuf, sizeof(mpBuf), "%s", o.modelPath.c_str());
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::InputText("Model##om", mpBuf, sizeof(mpBuf)))
         {
-            ImGui::PushStyleColor(ImGuiCol_Text,ImVec4{1.f,.8f,.2f,1.f});
-            ImGui::TextUnformatted("  ⏸  SIMULATION PAUSED");
-            ImGui::PopStyleColor();
+            o.modelPath = mpBuf; changed = true;
+        }
+
+        char tpBuf[256];
+        snprintf(tpBuf, sizeof(tpBuf), "%s", o.texturePath.c_str());
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::InputText("Texture##ot", tpBuf, sizeof(tpBuf)))
+        {
+            o.texturePath = tpBuf; changed = true;
+        }
+
+        // ── Transform ────────────────────────────────────────────────────────────
+        ImGui::Spacing();
+        ImGui::SeparatorText("Transform");
+
+        float pos[3] = { o.x,  o.y,  o.z };
+        ImGui::Text("Position"); ImGui::SameLine(90);
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::DragFloat3("##op", pos, 0.01f, -1e4f, 1e4f, "%.3f"))
+        {
+            o.x = pos[0]; o.y = pos[1]; o.z = pos[2]; changed = true;
+        }
+
+        float rot[3] = { o.rx, o.ry, o.rz };
+        ImGui::Text("Rotation"); ImGui::SameLine(90);
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::DragFloat3("##or", rot, 0.1f, -360.f, 360.f, "%.2f"))
+        {
+            o.rx = rot[0]; o.ry = rot[1]; o.rz = rot[2]; changed = true;
+        }
+
+        float scl[3] = { o.sx, o.sy, o.sz };
+        ImGui::Text("Scale");    ImGui::SameLine(90);
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::DragFloat3("##os", scl, 0.005f, 0.001f, 500.f, "%.3f"))
+        {
+            o.sx = scl[0]; o.sy = scl[1]; o.sz = scl[2]; changed = true;
+        }
+
+        // ── Physics ───────────────────────────────────────────────────────────────
+        ImGui::Spacing();
+        ImGui::SeparatorText("Physics");
+
+        if (ImGui::Checkbox("Static##ost", &o.isStatic))           changed = true;
+        ImGui::SetNextItemWidth(120);
+        if (ImGui::DragFloat("Weight (kg)##ow", &o.weight,
+            0.1f, 0.f, 1e6f, "%.1f"))             changed = true;
+        if (o.weight <= 0.f)
+            ImGui::SameLine(), ImGui::TextDisabled("(auto)");
+
+        // Quick-apply single object
+        ImGui::Spacing();
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.18f, 0.44f, 0.18f, 1.f });
+        if (ImGui::Button("Spawn this object"))
+        {
+            SpawnObject(o);
+            SetStatus(("Spawned: " + o.name).c_str(), true);
+        }
+        ImGui::PopStyleColor();
+
+        // ── Colliders ─────────────────────────────────────────────────────────────
+        ImGui::Spacing();
+        ImGui::SeparatorText("Colliders");
+
+        // Add / Remove / Duplicate
+        if (ImGui::SmallButton("+ Add"))
+        {
+            SceneCollider c;
+            c.name = "Collider_" + std::to_string(o.colliders.size());
+            o.colliders.push_back(c);
+            g_selCol = (int)o.colliders.size() - 1;
+            changed = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Dup.") && g_selCol >= 0
+            && g_selCol < (int)o.colliders.size())
+        {
+            SceneCollider copy = o.colliders[g_selCol];
+            copy.name += "_copy";
+            o.colliders.insert(o.colliders.begin() + g_selCol + 1, copy);
+            g_selCol++;
+            changed = true;
+        }
+        ImGui::SameLine();
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.5f, 0.1f, 0.1f, 1.f });
+        if (ImGui::SmallButton("Del.") && g_selCol >= 0
+            && g_selCol < (int)o.colliders.size())
+        {
+            o.colliders.erase(o.colliders.begin() + g_selCol);
+            if (g_selCol >= (int)o.colliders.size())
+                g_selCol = (int)o.colliders.size() - 1;
+            changed = true;
+        }
+        ImGui::PopStyleColor();
+
+        // Collider list as a small box
+        if (!o.colliders.empty())
+        {
+            float listH = std::min((int)o.colliders.size(), 4) * 20.f + 8.f;
+            ImGui::BeginChild("##collist", ImVec2(-1, listH), true);
+            for (int ci = 0; ci < (int)o.colliders.size(); ++ci)
+            {
+                char cLabel[128];
+                snprintf(cLabel, sizeof(cLabel), " ⬡  %s  [%s]%s",
+                    o.colliders[ci].name.c_str(),
+                    ColliderShapeName(o.colliders[ci].shape),
+                    o.colliders[ci].isTrigger ? "  T" : "");
+                bool cSel = (g_selCol == ci);
+                if (ImGui::Selectable(cLabel, cSel))
+                    g_selCol = ci;
+            }
+            ImGui::EndChild();
+        }
+        else
+        {
+            ImGui::TextDisabled("No colliders. Click '+ Add' to create one.");
+        }
+
+        // Collider detail inspector
+        if (g_selCol >= 0 && g_selCol < (int)o.colliders.size())
+        {
+            ImGui::Spacing();
+            if (DrawColliderInspector(o.colliders[g_selCol]), true)
+                changed = true;
+        }
+
+        if (changed)
+            g_scene.MarkDirty();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    //  Modal dialogs
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    static void DrawModals()
+    {
+        // ── New confirm ───────────────────────────────────────────────────────────
+        if (g_showNewConfirm)
+        {
+            ImGui::OpenPopup("Unsaved Changes – New");
+            g_showNewConfirm = false;
+        }
+        if (ImGui::BeginPopupModal("Unsaved Changes – New",
+            nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::Text("The scene has unsaved changes.\nDiscard and create a new scene?");
             ImGui::Separator();
+            if (ImGui::Button("Discard & New", { 130, 0 }))
+            {
+                DoNew(); ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", { 80, 0 }))
+                ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
         }
 
-        if (ImGui::BeginTabBar("##tabs"))
+        // ── Load confirm ──────────────────────────────────────────────────────────
+        if (g_showLoadConfirm)
         {
-            if (ImGui::BeginTabItem("Scene"))      { PanelSceneObjects();   ImGui::EndTabItem(); }
-            if (ImGui::BeginTabItem("Physics"))    { PanelPhysics();        ImGui::EndTabItem(); }
-            if (ImGui::BeginTabItem("Bodies"))     { PanelBodies();         ImGui::EndTabItem(); }
-            if (ImGui::BeginTabItem("Collision"))  { PanelCollision();      ImGui::EndTabItem(); }
-            if (ImGui::BeginTabItem("Simulation")) { PanelSimulation();     ImGui::EndTabItem(); }
-            if (ImGui::BeginTabItem("Engine"))     { PanelEngineSettings(); ImGui::EndTabItem(); }
-            if (ImGui::BeginTabItem("Render"))     { PanelRenderer();       ImGui::EndTabItem(); }
-            if (ImGui::BeginTabItem("Perf"))       { PanelPerformance();    ImGui::EndTabItem(); }
-            if (ImGui::BeginTabItem("Log"))        { PanelLog();            ImGui::EndTabItem(); }
-            if (ImGui::BeginTabItem("Scene File")) { DebugUI_RenderSceneFilePanel(); ImGui::EndTabItem(); }
-            ImGui::EndTabBar();
+            ImGui::OpenPopup("Unsaved Changes – Load");
+            g_showLoadConfirm = false;
+        }
+        if (ImGui::BeginPopupModal("Unsaved Changes – Load",
+            nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::Text("Unsaved changes will be lost.\nLoad '%s' anyway?",
+                g_pendingLoadPath);
+            ImGui::Separator();
+            if (ImGui::Button("Discard & Load", { 130, 0 }))
+            {
+                DoLoad(g_pendingLoadPath); ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", { 80, 0 }))
+                ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        }
+
+        // ── Save As ───────────────────────────────────────────────────────────────
+        if (g_showSaveAsPopup)
+        {
+            ImGui::OpenPopup("Save As");
+            g_showSaveAsPopup = false;
+        }
+        if (ImGui::BeginPopupModal("Save As",
+            nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::Text("Save scene to:");
+            ImGui::SetNextItemWidth(360);
+            ImGui::InputText("##sapath", g_pathBuf, sizeof(g_pathBuf));
+            ImGui::Separator();
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.18f, 0.44f, 0.18f, 1.f });
+            if (ImGui::Button("Save", { 80, 0 }))
+            {
+                DoSave(g_pathBuf); ImGui::CloseCurrentPopup();
+            }
+            ImGui::PopStyleColor();
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", { 80, 0 }))
+                ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
         }
     }
 
-    ImGui::End();
+    // ─────────────────────────────────────────────────────────────────────────────
+    //  Status bar
+    // ─────────────────────────────────────────────────────────────────────────────
 
-    ImGui::Render();
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-}
+    static void DrawStatusBar()
+    {
+        ImGui::Separator();
+        if (g_statusTimer > 0.f)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Text,
+                g_statusOk ? ImVec4{ 0.30f,1.00f,0.40f,1.f }
+            : ImVec4{ 1.00f,0.35f,0.35f,1.f });
+            ImGui::TextUnformatted(g_status);
+            ImGui::PopStyleColor();
+            g_statusTimer -= ImGui::GetIO().DeltaTime;
+        }
+        else
+        {
+            // Show object/collider count in dim style
+            ImGui::TextDisabled("%zu object(s)  |  sel: obj=%d  col=%d  |  %s",
+                g_scene.objects.size(), g_selObj, g_selCol,
+                g_scene.IsModified() ? "MODIFIED" : "saved");
+        }
+    }
 
-bool DebugUI_HandleKey(int key, int action, int mods)
+} // namespace SceneEd
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  Public entry point  (called from debugui.cpp)
+// ═════════════════════════════════════════════════════════════════════════════
+void DebugUI_RenderSceneEditor()
 {
-    if (key==GLFW_KEY_D && action==GLFW_PRESS && (mods&GLFW_MOD_ALT))
-        { g_open=!g_open; return true; }
-    // Space = single step (menu may be closed)
-    if (key==GLFW_KEY_SPACE && action==GLFW_PRESS && g_simPaused)
-        { g_stepQueued=true; return true; }
-    return false;
-}
+    using namespace SceneEd;
 
-void DebugUI_Shutdown()
-{
-    AppLog::Uninstall();
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplGlfw_Shutdown();
-    ImGui::DestroyContext();
-}
+    // ── Toolbar (file ops + path) ─────────────────────────────────────────────
+    DrawToolbar();
+    ImGui::Spacing();
 
-// Accessors
-const float*                          DebugUI_GetLightDir()      { return g_lightDir; }
-float                                 DebugUI_GetBrightness()    { return g_brightness; }
-float                                 DebugUI_GetLightStrength() { return g_lightStrength; }
-bool                                  DebugUI_GetSimPaused()     { return g_simPaused; }
-float                                 DebugUI_GetSimSpeed()      { return g_simSpeed; }
-bool                                  DebugUI_ConsumeStep()      { bool v=g_stepQueued; g_stepQueued=false; return v; }
-const JPH::BodyManager::DrawSettings& DebugUI_GetDrawSettings()  { return g_drawSettings; }
+    // ── Scene Actions (Apply / Capture) ──────────────────────────────────────
+    DrawSceneActions();
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    // ── Main two-panel layout ─────────────────────────────────────────────────
+    float fullW = ImGui::GetContentRegionAvail().x;
+    float statusH = ImGui::GetTextLineHeightWithSpacing() + 6.f;
+    float treeW = std::max(160.f, fullW * 0.30f);
+    float inspectW = fullW - treeW - ImGui::GetStyle().ItemSpacing.x;
+    float panelH = ImGui::GetContentRegionAvail().y - statusH - 8.f;
+
+    // Left: object tree
+    ImGui::BeginChild("##treePanel", ImVec2(treeW, panelH), true);
+    DrawObjectTree(treeW - 6.f);
+    ImGui::EndChild();
+
+    ImGui::SameLine();
+
+    // Right: inspector
+    ImGui::BeginChild("##inspectPanel", ImVec2(inspectW, panelH), true,
+        ImGuiWindowFlags_HorizontalScrollbar);
+    DrawInspector();
+    ImGui::EndChild();
+
+    // ── Modals ────────────────────────────────────────────────────────────────
+    DrawModals();
+
+    // ── Status bar ────────────────────────────────────────────────────────────
+    DrawStatusBar();
+}
