@@ -19,6 +19,7 @@
 #include "objloader.h"
 #include "engine.h"
 #include "mecowa.h"
+#include "physics_tick.h"
 #include "engine_camera.h"
 #include "material_registry.h"
 #include "jolt_init.h"
@@ -184,13 +185,7 @@ int main(void)
 
         glfwPollEvents();
 
-        // ── Update ────────────────────────────────────────────────────────────
-        // Only move the camera when ImGui is NOT capturing the mouse/keyboard
-        if (!ImGui::GetIO().WantCaptureMouse && !ImGui::GetIO().WantCaptureKeyboard)
-            camCtrl.Update(window, deltaTime);
-
-        float scaledDeltaTime = deltaTime * DebugUI_GetTimeScale();  // Apply time scale
-        Physics_Update(scaledDeltaTime);  // Pass scaled time to physics
+        PhysicsTick_Accumulate(deltaTime, DebugUI_GetTimeScale());
 
 
         // ── Render ────────────────────────────────────────────────────────────

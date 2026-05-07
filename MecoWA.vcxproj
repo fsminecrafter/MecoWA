@@ -160,6 +160,7 @@ JPH_FLOATING_POINT_EXCEPTIONS_ENABLED;JPH_DEBUG_RENDERER;JPH_PROFILE_ENABLED;JPH
   <ItemGroup>
     <ClInclude Include="core\resources\glfw\include\glfw\glfw3.h" />
     <ClInclude Include="core\resources\glfw\include\glfw\glfw3native.h" />
+    <ClInclude Include="Core\Scripts\mainscript\collider_generator.h" />
     <ClInclude Include="Core\Scripts\mainscript\ComputeInertiaTensor.h" />
     <ClInclude Include="Core\Scripts\mainscript\debugrender.h" />
     <ClInclude Include="Core\Scripts\mainscript\debugui.h" />
@@ -174,6 +175,7 @@ JPH_FLOATING_POINT_EXCEPTIONS_ENABLED;JPH_DEBUG_RENDERER;JPH_PROFILE_ENABLED;JPH
     <ClInclude Include="Core\Scripts\mainscript\objloader.h" />
     <ClInclude Include="Core\Scripts\mainscript\physics.h" />
     <ClInclude Include="Core\Scripts\mainscript\physicsDefine.h" />
+    <ClInclude Include="Core\Scripts\mainscript\physics_tick.h" />
     <ClInclude Include="Core\Scripts\mainscript\robjloader.h" />
     <ClInclude Include="Core\Scripts\mainscript\scene_file.h" />
     <ClInclude Include="Core\Scripts\mainscript\shaderloader.h" />

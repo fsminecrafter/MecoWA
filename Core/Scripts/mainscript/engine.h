@@ -51,7 +51,6 @@ void Transform(ModelInstance& instance, const glm::vec3& rotation, const glm::ve
 void rotateObject(ModelInstance& instance, const glm::vec3& rotation);
 void moveObject(ModelInstance& instance, const glm::vec3& position);
 
-void Physics_SyncToEngine();
 void RegisterPhysics_Box(ModelInstance& inst, const OBJData& mesh, float mass, float friction = 0.5f, float restitution = 0.1f, bool originAtBottom = true, glm::vec3 boxsize = glm::vec3(1.0f, 1.0f, 1.0f));
 void RegisterPhysics_Convex(ModelInstance& inst, float mass, float friction = 0.6f, float restitution = 0.1f, bool originAtBottom = false);
 
