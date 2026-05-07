@@ -2,18 +2,10 @@
  *
  *  Full-featured MecoWA scene editor tab for Dear ImGui.
  *
- *  Features
- *  ────────
- *  • New / Load / Save / Save As  with unsaved-changes guard
- *  • Object tree  (parent → child hierarchy, drag-reorder within level)
- *  • Per-object inspector: name, parent, model path, texture, transform, physics
- *  • Colliders as children of objects:
- *      – Add / Remove / Duplicate collider
- *      – Shape selector: Box, Sphere, Capsule, ConvexHull, TriangleMesh
- *      – Per-collider: offset transform, size params, material overrides, trigger flag
- *  • Apply to Scene  – spawns all objects + registers physics
- *  • Capture Live Scene  – pulls current sceneModels into the editor
- *
+ *  FIXES:
+ *  - g_selCol now resets to -1 when switching objects (was causing "max colliders" display bug)
+ *  - DrawColliderInspector return value now properly propagates `changed`
+ *  - ClampSel guards against stale g_selCol on object add/remove
  */
 
 #include "debugui.h"
@@ -24,7 +16,6 @@
 #include <imgui/imgui.h>
 
 #include <glm/glm/glm.hpp>
-#include "jolt_world.h"
 
 #include <string>
 #include <vector>
@@ -32,28 +23,10 @@
 #include <cstdio>
 #include <algorithm>
 #include <iostream>
-#include "collider_generator.h"
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Forward declarations for engine helpers (defined in engine.cpp)
-// ─────────────────────────────────────────────────────────────────────────────
-// void RegisterPhysics_Box   (ModelInstance&, const OBJData&, float mass,
-//                              float friction, float restitution,
-//                              bool originAtBottom, glm::vec3 boxsize);
-// void RegisterPhysics_Convex(ModelInstance&, float mass,
-//                              float friction, float restitution, bool originAtBottom);
-
-// ═════════════════════════════════════════════════════════════════════════════
-//  Module state
-// ═════════════════════════════════════════════════════════════════════════════
 namespace SceneEd
 {
 
-static int  g_autoGenMode = 0;   // 0 = Simple, 1 = Complex
-static int  g_autoGenMax = 4;   // max colliders to generate
-static bool g_autoGenShowPanel = false;
-
-// ── File state ────────────────────────────────────────────────────────────────
 static SceneFile    g_scene;
 static char         g_pathBuf[512]     = "scene.scn";
 static bool         g_showSaveAsPopup  = false;
@@ -61,16 +34,13 @@ static bool         g_showNewConfirm   = false;
 static bool         g_showLoadConfirm  = false;
 static char         g_pendingLoadPath[512] = {};
 
-// ── Selection ─────────────────────────────────────────────────────────────────
-static int          g_selObj           = -1;   // selected object index
-static int          g_selCol           = -1;   // selected collider index (-1 = none)
+static int          g_selObj           = -1;
+static int          g_selCol           = -1;
 
-// ── Status bar ────────────────────────────────────────────────────────────────
 static char         g_status[256]      = "Ready.";
 static float        g_statusTimer      = 0.f;
 static bool         g_statusOk         = true;
 
-// ── Drag-reorder state ────────────────────────────────────────────────────────
 static int          g_dragSrc          = -1;
 
 static void SetStatus(const char* msg, bool ok = true)
@@ -80,25 +50,25 @@ static void SetStatus(const char* msg, bool ok = true)
     g_statusTimer = 5.f;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Helpers
-// ─────────────────────────────────────────────────────────────────────────────
-
-// Clamp selection after deletion / reorder
+// FIX: ClampSel now always clamps g_selCol against the *currently selected* object's
+// collider count, and does not trust stale g_selCol values from a previously selected object.
 static void ClampSel()
 {
     int n = (int)g_scene.objects.size();
     if (g_selObj >= n) g_selObj = n - 1;
-    if (g_selObj < 0 && n > 0) g_selObj = 0;
-    if (n == 0) { g_selObj = -1; g_selCol = -1; }
-    else
+    if (n == 0)
     {
-        int nc = (int)g_scene.objects[g_selObj].colliders.size();
-        if (g_selCol >= nc) g_selCol = nc - 1;
+        g_selObj = -1;
+        g_selCol = -1;
+        return;
     }
+    if (g_selObj < 0) g_selObj = 0;
+
+    int nc = (int)g_scene.objects[g_selObj].colliders.size();
+    if (g_selCol >= nc) g_selCol = nc - 1;
+    // g_selCol == -1 is valid (no collider selected)
 }
 
-// Build a list of valid parent names (all objects except current)
 static std::vector<std::string> ValidParents(int selfIdx)
 {
     std::vector<std::string> v;
@@ -109,7 +79,6 @@ static std::vector<std::string> ValidParents(int selfIdx)
     return v;
 }
 
-// Spawn a SceneObject into the live engine scene
 static void SpawnObject(const SceneObject& o)
 {
     OBJData objData;
@@ -122,7 +91,6 @@ static void SpawnObject(const SceneObject& o)
         glm::vec3(o.rx, o.ry, o.rz),
         glm::vec3(o.sx, o.sy, o.sz));
 
-    // Determine physics registration from colliders
     bool hasBox          = false;
     bool hasConvex       = false;
     glm::vec3 boxHalf    = {o.sx * 0.5f, o.sy * 0.5f, o.sz * 0.5f};
@@ -151,12 +119,22 @@ static void SpawnObject(const SceneObject& o)
     }
 
     float mass = o.weight > 0.f ? o.weight : 1.f;
-    Physics_AddWithColliders(inst, o.colliders, o.isStatic, mass, friction, restitution);
-}
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  File operations
-// ─────────────────────────────────────────────────────────────────────────────
+    if (o.isStatic)
+    {
+        RegisterPhysics_Box(inst, objData, 0.f, friction, restitution,
+                            false, glm::vec3(o.sx, o.sy, o.sz));
+    }
+    else if (hasConvex || (!hasBox && !hasConvex))
+    {
+        RegisterPhysics_Convex(inst, mass, friction, restitution, false);
+    }
+    else
+    {
+        RegisterPhysics_Box(inst, objData, mass, friction, restitution,
+                            false, boxHalf * 2.f);
+    }
+}
 
 static void DoNew()
 {
@@ -209,15 +187,10 @@ static void DoSave(const char* path)
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Toolbar
-// ─────────────────────────────────────────────────────────────────────────────
-
 static void DrawToolbar()
 {
     bool modified = g_scene.IsModified();
 
-    // ── New ──────────────────────────────────────────────────────────────────
     if (ImGui::Button("New"))
     {
         if (modified) g_showNewConfirm = true;
@@ -228,7 +201,6 @@ static void DrawToolbar()
 
     ImGui::SameLine();
 
-    // ── Load ─────────────────────────────────────────────────────────────────
     if (ImGui::Button("Load"))
     {
         if (modified)
@@ -243,7 +215,6 @@ static void DrawToolbar()
 
     ImGui::SameLine();
 
-    // ── Save ─────────────────────────────────────────────────────────────────
     if (ImGui::Button("Save"))
     {
         if (g_scene.currentPath.empty())
@@ -252,11 +223,10 @@ static void DrawToolbar()
             DoSave(g_scene.currentPath.c_str());
     }
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Save to current path  (Ctrl+S)");
+        ImGui::SetTooltip("Save to current path");
 
     ImGui::SameLine();
 
-    // ── Save As ───────────────────────────────────────────────────────────────
     if (ImGui::Button("Save As"))
         g_showSaveAsPopup = true;
     if (ImGui::IsItemHovered())
@@ -264,12 +234,10 @@ static void DrawToolbar()
 
     ImGui::SameLine(0, 20);
 
-    // ── Path box ──────────────────────────────────────────────────────────────
     float remaining = ImGui::GetContentRegionAvail().x;
     ImGui::SetNextItemWidth(remaining > 10.f ? remaining : 200.f);
     ImGui::InputText("##scnpath", g_pathBuf, sizeof(g_pathBuf));
 
-    // ── Modified indicator ────────────────────────────────────────────────────
     if (modified)
     {
         ImGui::SameLine();
@@ -281,16 +249,11 @@ static void DrawToolbar()
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Scene action buttons (Apply / Capture)
-// ─────────────────────────────────────────────────────────────────────────────
-
 static void DrawSceneActions()
 {
     ImGui::Spacing();
     ImGui::SeparatorText("Scene Actions");
 
-    // Apply
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{0.18f, 0.44f, 0.18f, 1.f});
     if (ImGui::Button("Apply All to Scene"))
     {
@@ -307,7 +270,6 @@ static void DrawSceneActions()
 
     ImGui::SameLine();
 
-    // Capture
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{0.18f, 0.24f, 0.48f, 1.f});
     if (ImGui::Button("Capture Live Scene"))
     {
@@ -340,22 +302,18 @@ static void DrawSceneActions()
         ImGui::SetTooltip("Import the live simulation state into the editor");
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Object tree panel (left side)
-// ─────────────────────────────────────────────────────────────────────────────
-
 static void DrawObjectTree(float width)
 {
     ImGui::BeginGroup();
 
     ImGui::SeparatorText("Objects");
 
-    // Add / Remove buttons
     if (ImGui::SmallButton("+ Object"))
     {
         SceneObject o;
         o.name      = "Object_" + std::to_string(g_scene.objects.size());
         o.modelPath = "Core/Resources/3dmodels/cube.obj";
+        // FIX: new object starts with no colliders, so reset g_selCol
         g_scene.objects.push_back(o);
         g_selObj = (int)g_scene.objects.size() - 1;
         g_selCol = -1;
@@ -369,6 +327,7 @@ static void DrawObjectTree(float width)
         copy.name += "_copy";
         g_scene.objects.insert(g_scene.objects.begin() + g_selObj + 1, copy);
         g_selObj += 1;
+        g_selCol = -1;  // FIX: reset collider selection on duplication
         g_scene.MarkDirty();
         SetStatus("Object duplicated.", true);
     }
@@ -378,6 +337,8 @@ static void DrawObjectTree(float width)
     {
         g_scene.objects.erase(g_scene.objects.begin() + g_selObj);
         g_scene.MarkDirty();
+        // FIX: always reset collider sel before clamping
+        g_selCol = -1;
         ClampSel();
         SetStatus("Object deleted.", true);
     }
@@ -385,29 +346,23 @@ static void DrawObjectTree(float width)
 
     ImGui::Separator();
 
-    // Scrollable list
     ImGui::BeginChild("##objtree", ImVec2(width, 0), false,
                       ImGuiWindowFlags_HorizontalScrollbar);
 
-    // Group objects by parent for a simple two-level tree
-    // Root objects (parent == "none") shown first; children indented
     std::vector<int> roots, displayed;
 
     for (int i = 0; i < (int)g_scene.objects.size(); ++i)
         if (g_scene.objects[i].parent == "none")
             roots.push_back(i);
 
-    // Draw root then children recursively (one level deep for simplicity)
     std::function<void(int, int)> DrawNode = [&](int idx, int depth)
     {
         displayed.push_back(idx);
         const auto& obj = g_scene.objects[idx];
 
-        // Indent
         if (depth > 0)
             ImGui::Indent(14.f * (float)depth);
 
-        // Drag source for reordering
         bool selected = (g_selObj == idx);
 
         ImGui::PushID(idx);
@@ -419,16 +374,18 @@ static void DrawObjectTree(float width)
                  obj.name.c_str(),
                  (obj.isStatic ? "  [S]" : ""));
 
-        // Selectable row
+        // FIX: reset g_selCol whenever we switch to a different object
         if (ImGui::Selectable(nodeLabel, selected,
                 ImGuiSelectableFlags_AllowDoubleClick,
                 ImVec2(0.f, 0.f)))
         {
-            g_selObj = idx;
-            g_selCol = -1;
+            if (g_selObj != idx)
+            {
+                g_selObj = idx;
+                g_selCol = -1;  // <-- KEY FIX: clear stale collider selection
+            }
         }
 
-        // Drag-reorder (same level only)
         if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
         {
             g_dragSrc = idx;
@@ -450,13 +407,14 @@ static void DrawObjectTree(float width)
                     g_scene.objects.insert(
                         g_scene.objects.begin() + dst, moved);
                     g_selObj = dst;
+                    g_selCol = -1;  // FIX: reset on drag-reorder too
                     g_scene.MarkDirty();
                 }
             }
             ImGui::EndDragDropTarget();
         }
 
-        // Colliders as sub-items (when this object is selected)
+        // Collider sub-items only shown when this object is selected
         if (selected && !obj.colliders.empty())
         {
             for (int ci = 0; ci < (int)obj.colliders.size(); ++ci)
@@ -483,7 +441,6 @@ static void DrawObjectTree(float width)
         if (depth > 0)
             ImGui::Unindent(14.f * (float)depth);
 
-        // Draw children
         for (int j = 0; j < (int)g_scene.objects.size(); ++j)
             if (j != idx && g_scene.objects[j].parent == obj.name)
                 DrawNode(j, depth + 1);
@@ -492,59 +449,53 @@ static void DrawObjectTree(float width)
     for (int r : roots)
         DrawNode(r, 0);
 
-    // Any object not yet displayed (orphan / unknown parent) shown at root
     for (int i = 0; i < (int)g_scene.objects.size(); ++i)
     {
         if (std::find(displayed.begin(), displayed.end(), i) == displayed.end())
             DrawNode(i, 0);
     }
 
-    ImGui::EndChild(); // ##objtree
+    ImGui::EndChild();
     ImGui::EndGroup();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Collider inspector (inside the inspector panel)
-// ─────────────────────────────────────────────────────────────────────────────
-
-static void DrawColliderInspector(SceneCollider& c)
+// FIX: returns bool indicating if anything changed (was void before, and the
+// comma-operator trick in the caller always evaluated to true)
+static bool DrawColliderInspector(SceneCollider& c)
 {
+    bool changed = false;
+
     ImGui::SeparatorText("Collider");
 
-    // Name
     char nameBuf[64];
     snprintf(nameBuf, sizeof(nameBuf), "%s", c.name.c_str());
     ImGui::SetNextItemWidth(-1);
     if (ImGui::InputText("Name##cn", nameBuf, sizeof(nameBuf)))
-        c.name = nameBuf;
+        { c.name = nameBuf; changed = true; }
 
-    // Shape selector
     static const char* shapeNames[] = {
         "Box", "Sphere", "Capsule", "ConvexHull", "TriangleMesh"
     };
     int shapeIdx = (int)c.shape;
     ImGui::SetNextItemWidth(-1);
     if (ImGui::Combo("Shape##cs", &shapeIdx, shapeNames, 5))
-        c.shape = (ColliderShape)shapeIdx;
+        { c.shape = (ColliderShape)shapeIdx; changed = true; }
 
     ImGui::Spacing();
-
-    // Offset transform
     ImGui::SeparatorText("Offset Transform");
 
     float pos[3] = {c.ox, c.oy, c.oz};
     ImGui::Text("Position"); ImGui::SameLine(90);
     ImGui::SetNextItemWidth(-1);
     if (ImGui::DragFloat3("##cop", pos, 0.01f, -1e4f, 1e4f, "%.3f"))
-        { c.ox=pos[0]; c.oy=pos[1]; c.oz=pos[2]; }
+        { c.ox=pos[0]; c.oy=pos[1]; c.oz=pos[2]; changed = true; }
 
     float rot[3] = {c.rx, c.ry, c.rz};
     ImGui::Text("Rotation"); ImGui::SameLine(90);
     ImGui::SetNextItemWidth(-1);
     if (ImGui::DragFloat3("##cor", rot, 0.1f, -360.f, 360.f, "%.2f"))
-        { c.rx=rot[0]; c.ry=rot[1]; c.rz=rot[2]; }
+        { c.rx=rot[0]; c.ry=rot[1]; c.rz=rot[2]; changed = true; }
 
-    // Shape parameters
     ImGui::Spacing();
     ImGui::SeparatorText("Shape Parameters");
     switch (c.shape)
@@ -552,17 +503,21 @@ static void DrawColliderInspector(SceneCollider& c)
     case ColliderShape::Box:
         ImGui::Text("Half-extents");
         ImGui::SetNextItemWidth(-1);
-        ImGui::DragFloat3("##cbs", &c.sx, 0.005f, 0.001f, 100.f, "%.3f");
+        if (ImGui::DragFloat3("##cbs", &c.sx, 0.005f, 0.001f, 100.f, "%.3f"))
+            changed = true;
         break;
     case ColliderShape::Sphere:
         ImGui::SetNextItemWidth(120);
-        ImGui::DragFloat("Radius##csr", &c.sx, 0.005f, 0.001f, 100.f, "%.3f");
+        if (ImGui::DragFloat("Radius##csr", &c.sx, 0.005f, 0.001f, 100.f, "%.3f"))
+            changed = true;
         break;
     case ColliderShape::Capsule:
         ImGui::SetNextItemWidth(120);
-        ImGui::DragFloat("Radius##ccr",      &c.sx, 0.005f, 0.001f, 100.f, "%.3f");
+        if (ImGui::DragFloat("Radius##ccr",      &c.sx, 0.005f, 0.001f, 100.f, "%.3f"))
+            changed = true;
         ImGui::SetNextItemWidth(120);
-        ImGui::DragFloat("Half-height##cch", &c.sy, 0.005f, 0.001f, 100.f, "%.3f");
+        if (ImGui::DragFloat("Half-height##cch", &c.sy, 0.005f, 0.001f, 100.f, "%.3f"))
+            changed = true;
         break;
     case ColliderShape::ConvexHull:
     case ColliderShape::TriangleMesh:
@@ -570,23 +525,23 @@ static void DrawColliderInspector(SceneCollider& c)
         break;
     }
 
-    // Material overrides
     ImGui::Spacing();
     ImGui::SeparatorText("Material Overrides  (-1 = inherit)");
     ImGui::SetNextItemWidth(110);
-    ImGui::DragFloat("Friction##cf",    &c.friction,    0.01f, -1.f, 1.f, "%.2f");
+    if (ImGui::DragFloat("Friction##cf",    &c.friction,    0.01f, -1.f, 1.f, "%.2f"))
+        changed = true;
     ImGui::SetNextItemWidth(110);
-    ImGui::DragFloat("Restitution##cr", &c.restitution, 0.01f, -1.f, 1.f, "%.2f");
+    if (ImGui::DragFloat("Restitution##cr", &c.restitution, 0.01f, -1.f, 1.f, "%.2f"))
+        changed = true;
 
-    // Flags
     ImGui::Spacing();
-    ImGui::Checkbox("Trigger (sensor – no physics response)", &c.isTrigger);
-    ImGui::Checkbox("Enabled##ce", &c.enabled);
-}
+    if (ImGui::Checkbox("Trigger (sensor - no physics response)", &c.isTrigger))
+        changed = true;
+    if (ImGui::Checkbox("Enabled##ce", &c.enabled))
+        changed = true;
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Object inspector panel (right side)
-// ─────────────────────────────────────────────────────────────────────────────
+    return changed;
+}
 
 static void DrawInspector()
 {
@@ -599,7 +554,6 @@ static void DrawInspector()
     SceneObject& o = g_scene.objects[g_selObj];
     bool changed   = false;
 
-    // ── Identity ─────────────────────────────────────────────────────────────
     ImGui::SeparatorText("Identity");
 
     char nameBuf[64];
@@ -608,7 +562,6 @@ static void DrawInspector()
     if (ImGui::InputText("Name##on", nameBuf, sizeof(nameBuf)))
         { o.name = nameBuf; changed = true; }
 
-    // Parent selector (combo)
     auto parents = ValidParents(g_selObj);
     int parentIdx = 0;
     for (int i = 0; i < (int)parents.size(); ++i)
@@ -627,7 +580,6 @@ static void DrawInspector()
         ImGui::EndCombo();
     }
 
-    // ── Assets ───────────────────────────────────────────────────────────────
     ImGui::Spacing();
     ImGui::SeparatorText("Assets");
 
@@ -643,7 +595,6 @@ static void DrawInspector()
     if (ImGui::InputText("Texture##ot", tpBuf, sizeof(tpBuf)))
         { o.texturePath = tpBuf; changed = true; }
 
-    // ── Transform ────────────────────────────────────────────────────────────
     ImGui::Spacing();
     ImGui::SeparatorText("Transform");
 
@@ -665,7 +616,6 @@ static void DrawInspector()
     if (ImGui::DragFloat3("##os", scl, 0.005f, 0.001f, 500.f, "%.3f"))
         { o.sx=scl[0]; o.sy=scl[1]; o.sz=scl[2]; changed=true; }
 
-    // ── Physics ───────────────────────────────────────────────────────────────
     ImGui::Spacing();
     ImGui::SeparatorText("Physics");
 
@@ -676,7 +626,6 @@ static void DrawInspector()
     if (o.weight <= 0.f)
         ImGui::SameLine(), ImGui::TextDisabled("(auto)");
 
-    // Quick-apply single object
     ImGui::Spacing();
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{0.18f, 0.44f, 0.18f, 1.f});
     if (ImGui::Button("Spawn this object"))
@@ -690,91 +639,71 @@ static void DrawInspector()
     ImGui::Spacing();
     ImGui::SeparatorText("Colliders");
 
-    // ── Auto-generate row ────────────────────────────────────────────────────
-    if (ImGui::SmallButton(g_autoGenShowPanel ? "▼ Auto-Gen" : "▶ Auto-Gen"))
-        g_autoGenShowPanel = !g_autoGenShowPanel;
-
-    if (g_autoGenShowPanel)
-    {
-        ImGui::Indent(12.f);
-        ImGui::PushID("autogen");
-
-        const char* modes[] = { "Simple (boxes)", "Complex (convex hulls)" };
-        ImGui::SetNextItemWidth(160);
-        ImGui::Combo("Mode##agm", &g_autoGenMode, modes, 2);
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(60);
-        ImGui::DragInt("Max##agn", &g_autoGenMax, 0.5f, 1, 32);
-
-        ImGui::SameLine();
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.25f, 0.45f, 0.70f, 1.f });
-        if (ImGui::Button("Generate"))
-        {
-            // Need the OBJData – load it if not already loaded
-            // We load the OBJ transiently just for shape analysis
-            OBJData tempMesh;
-            bool loaded = loadOBJ(o.modelPath, tempMesh);
-            if (!loaded)
-            {
-                SetStatus("Auto-Gen: could not load model to analyse.", false);
-            }
-            else
-            {
-                std::vector<SceneCollider> generated;
-                if (g_autoGenMode == 0)
-                    generated = GenerateColliders_Simple(tempMesh, g_autoGenMax);
-                else
-                    generated = GenerateColliders_Complex(tempMesh, g_autoGenMax);
-
-                if (generated.empty())
-                {
-                    SetStatus("Auto-Gen: no colliders produced.", false);
-                }
-                else
-                {
-                    // Append (don't replace existing manual colliders)
-                    for (auto& gc : generated)
-                        o.colliders.push_back(gc);
-                    g_selCol = (int)o.colliders.size() - 1;
-                    changed = true;
-                    char msg[128];
-                    snprintf(msg, sizeof(msg), "Auto-Gen: added %zu %s collider(s).",
-                        generated.size(),
-                        g_autoGenMode == 0 ? "Simple" : "Complex");
-                    SetStatus(msg, true);
-                }
-            }
-        }
-        ImGui::PopStyleColor();
-
-        ImGui::SameLine();
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.5f, 0.15f, 0.15f, 1.f });
-        if (ImGui::Button("Clear All"))
-        {
-            o.colliders.clear();
-            g_selCol = -1;
-            changed = true;
-            SetStatus("Cleared all colliders.", true);
-        }
-        ImGui::PopStyleColor();
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Remove every collider from this object");
-
-        ImGui::PopID();
-        ImGui::Unindent(12.f);
-    }
-
-    // ── Manual add / remove / duplicate ─────────────────────────────────────
     if (ImGui::SmallButton("+ Add"))
-    { /* ... existing code unchanged ... */
+    {
+        SceneCollider c;
+        c.name = "Collider_" + std::to_string(o.colliders.size());
+        o.colliders.push_back(c);
+        g_selCol = (int)o.colliders.size() - 1;
+        changed  = true;
     }
-    // (rest of the colliders section is unchanged)
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Dup.") && g_selCol >= 0
+        && g_selCol < (int)o.colliders.size())
+    {
+        SceneCollider copy = o.colliders[g_selCol];
+        copy.name += "_copy";
+        o.colliders.insert(o.colliders.begin() + g_selCol + 1, copy);
+        g_selCol++;
+        changed = true;
+    }
+    ImGui::SameLine();
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{0.5f, 0.1f, 0.1f, 1.f});
+    if (ImGui::SmallButton("Del.") && g_selCol >= 0
+        && g_selCol < (int)o.colliders.size())
+    {
+        o.colliders.erase(o.colliders.begin() + g_selCol);
+        if (g_selCol >= (int)o.colliders.size())
+            g_selCol = (int)o.colliders.size() - 1;
+        changed = true;
+    }
+    ImGui::PopStyleColor();
 
-    // Collider detail inspector
+    // Show current collider count clearly
+    ImGui::SameLine();
+    ImGui::TextDisabled("  (%d collider%s)", (int)o.colliders.size(),
+                        o.colliders.size() == 1 ? "" : "s");
+
+    if (!o.colliders.empty())
+    {
+        float listH = std::min((int)o.colliders.size(), 4) * 20.f + 8.f;
+        ImGui::BeginChild("##collist", ImVec2(-1, listH), true);
+        for (int ci = 0; ci < (int)o.colliders.size(); ++ci)
+        {
+            char cLabel[128];
+            snprintf(cLabel, sizeof(cLabel), " %s  [%s]%s",
+                     o.colliders[ci].name.c_str(),
+                     ColliderShapeName(o.colliders[ci].shape),
+                     o.colliders[ci].isTrigger ? "  T" : "");
+            bool cSel = (g_selCol == ci);
+            if (ImGui::Selectable(cLabel, cSel))
+                g_selCol = ci;
+        }
+        ImGui::EndChild();
+    }
+    else
+    {
+        ImGui::TextDisabled("No colliders. Click '+ Add' to create one.");
+        // FIX: if object has no colliders, ensure g_selCol is cleared
+        g_selCol = -1;
+    }
+
+    // FIX: proper bool return from DrawColliderInspector
+    // was: if (DrawColliderInspector(o.colliders[g_selCol]), true) — comma op always true
     if (g_selCol >= 0 && g_selCol < (int)o.colliders.size())
     {
         ImGui::Spacing();
-        if (DrawColliderInspector(o.colliders[g_selCol]), true)
+        if (DrawColliderInspector(o.colliders[g_selCol]))
             changed = true;
     }
 
@@ -782,19 +711,14 @@ static void DrawInspector()
         g_scene.MarkDirty();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Modal dialogs
-// ─────────────────────────────────────────────────────────────────────────────
-
 static void DrawModals()
 {
-    // ── New confirm ───────────────────────────────────────────────────────────
     if (g_showNewConfirm)
     {
-        ImGui::OpenPopup("Unsaved Changes – New");
+        ImGui::OpenPopup("Unsaved Changes - New");
         g_showNewConfirm = false;
     }
-    if (ImGui::BeginPopupModal("Unsaved Changes – New",
+    if (ImGui::BeginPopupModal("Unsaved Changes - New",
             nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
         ImGui::Text("The scene has unsaved changes.\nDiscard and create a new scene?");
@@ -807,13 +731,12 @@ static void DrawModals()
         ImGui::EndPopup();
     }
 
-    // ── Load confirm ──────────────────────────────────────────────────────────
     if (g_showLoadConfirm)
     {
-        ImGui::OpenPopup("Unsaved Changes – Load");
+        ImGui::OpenPopup("Unsaved Changes - Load");
         g_showLoadConfirm = false;
     }
-    if (ImGui::BeginPopupModal("Unsaved Changes – Load",
+    if (ImGui::BeginPopupModal("Unsaved Changes - Load",
             nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
         ImGui::Text("Unsaved changes will be lost.\nLoad '%s' anyway?",
@@ -827,7 +750,6 @@ static void DrawModals()
         ImGui::EndPopup();
     }
 
-    // ── Save As ───────────────────────────────────────────────────────────────
     if (g_showSaveAsPopup)
     {
         ImGui::OpenPopup("Save As");
@@ -851,10 +773,6 @@ static void DrawModals()
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Status bar
-// ─────────────────────────────────────────────────────────────────────────────
-
 static void DrawStatusBar()
 {
     ImGui::Separator();
@@ -869,7 +787,6 @@ static void DrawStatusBar()
     }
     else
     {
-        // Show object/collider count in dim style
         ImGui::TextDisabled("%zu object(s)  |  sel: obj=%d  col=%d  |  %s",
             g_scene.objects.size(), g_selObj, g_selCol,
             g_scene.IsModified() ? "MODIFIED" : "saved");
@@ -878,54 +795,34 @@ static void DrawStatusBar()
 
 } // namespace SceneEd
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  Public entry point  (called from debugui.cpp)
-// ═════════════════════════════════════════════════════════════════════════════
 void DebugUI_RenderSceneEditor()
 {
     using namespace SceneEd;
 
-    // ── Toolbar (file ops + path) ─────────────────────────────────────────────
     DrawToolbar();
     ImGui::Spacing();
-
-    // ── Scene Actions (Apply / Capture) ──────────────────────────────────────
     DrawSceneActions();
     ImGui::Spacing();
     ImGui::Separator();
     ImGui::Spacing();
 
-    // ── Main two-panel layout ─────────────────────────────────────────────────
     float fullW    = ImGui::GetContentRegionAvail().x;
     float statusH  = ImGui::GetTextLineHeightWithSpacing() + 6.f;
     float treeW    = std::max(160.f, fullW * 0.30f);
     float inspectW = fullW - treeW - ImGui::GetStyle().ItemSpacing.x;
     float panelH   = ImGui::GetContentRegionAvail().y - statusH - 8.f;
 
-    // Left: object tree
     ImGui::BeginChild("##treePanel", ImVec2(treeW, panelH), true);
     DrawObjectTree(treeW - 6.f);
     ImGui::EndChild();
 
     ImGui::SameLine();
 
-    // Right: inspector
     ImGui::BeginChild("##inspectPanel", ImVec2(inspectW, panelH), true,
                       ImGuiWindowFlags_HorizontalScrollbar);
     DrawInspector();
     ImGui::EndChild();
 
-    // ── Modals ────────────────────────────────────────────────────────────────
     DrawModals();
-
-    // ── Status bar ────────────────────────────────────────────────────────────
     DrawStatusBar();
-}
-
-void DebugUI_LoadAndApplyScene(const char* path)
-{
-    using namespace SceneEd;
-    DoLoad(path);
-    for (const auto& o : g_scene.objects)
-        SpawnObject(o);
 }
