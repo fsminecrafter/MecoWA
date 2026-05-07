@@ -238,7 +238,10 @@ int main(void)
             glEnable(GL_DEPTH_TEST);
         }
 
-        // ── Dear ImGui overlay (Alt+D) ────────────────────────────────────────
+        ImGuiIO& io = ImGui::GetIO();
+        if (!io.WantCaptureMouse && !io.WantCaptureKeyboard)
+            camCtrl.Update(window, deltaTime);
+
         DebugUI_Render(deltaTime);
 
         glfwSwapBuffers(window);
