@@ -50,6 +50,9 @@ int windowHeight = 480;
 std::string version = "0.073";
 bool joltinitsuccess = true;
 
+// ── Forward declaration for the collider overlay (implemented in debugui.cpp) ──
+void DebugUI_DrawColliderOverlay(const glm::mat4& view, const glm::mat4& projection);
+
 void errorpopup(int code)
 {
     char buffer[256];
@@ -74,10 +77,9 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 
 // ── Key callback ─────────────────────────────────────────────────────────────
 // Alt+D  → toggle ImGui debug overlay
-// F3     → toggle Jolt wireframe debug draw (existing debugmode)
+// F3     → toggle Jolt wireframe debug draw
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
-    // Let ImGui handle Alt+D first; if it consumed the event, stop here
     if (DebugUI_HandleKey(key, action, mods))
         return;
 
@@ -97,7 +99,6 @@ int main(void)
     printf("By Joel_minecrafter\n");
     printf("GLFW Version: %s\n", glfwGetVersionString());
 
-    // GLFW setup
     glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WIN32);
     glfwInitHint(GLFW_JOYSTICK_HAT_BUTTONS, GLFW_FALSE);
 
@@ -114,7 +115,6 @@ int main(void)
         return -1;
     }
 
-    // Request an OpenGL 3.3 core context (required by ImGui's GLSL #version 330)
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
@@ -132,7 +132,6 @@ int main(void)
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSetKeyCallback(window, key_callback);
 
-    // Initialize GLAD
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         std::cerr << "Failed to initialize GLAD\n";
         glfwTerminate();
@@ -166,7 +165,6 @@ int main(void)
     Material Metal("Metal", 7800.0f, 0.3f, 0.2f, 0.8f);
     MaterialRegistry::Register(Metal);
 
-    // Create camera
     static Camera camera = CreateCamera(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f), 45.0f);
     CameraController camCtrl(camera);
     glfwSetWindowUserPointer(window, &camera);
@@ -187,7 +185,6 @@ int main(void)
 
         PhysicsTick_Accumulate(deltaTime, DebugUI_GetTimeScale());
 
-
         // ── Render ────────────────────────────────────────────────────────────
         glClearColor(0.07f, 0.08f, 0.10f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -198,18 +195,20 @@ int main(void)
             (float)windowWidth / (float)windowHeight,
             0.1f, 100.0f);
 
-        // Feed light values from the ImGui Renderer tab back into the shader
         const float* ld = DebugUI_GetLightDir();
         shader.use();
-        shader.setMat4 ("view",         view);
-        shader.setMat4 ("projection",   projection);
-        shader.setVec3 ("lightDir",     glm::normalize(glm::vec3(ld[0], ld[1], ld[2])));
-        shader.setFloat("lightStrength",DebugUI_GetLightStrength());
-        shader.setFloat("brightness",   DebugUI_GetBrightness());
-        shader.setVec3 ("cameraPos",    camera.position);
+        shader.setMat4 ("view",          view);
+        shader.setMat4 ("projection",    projection);
+        shader.setVec3 ("lightDir",      glm::normalize(glm::vec3(ld[0], ld[1], ld[2])));
+        shader.setFloat("lightStrength", DebugUI_GetLightStrength());
+        shader.setFloat("brightness",    DebugUI_GetBrightness());
+        shader.setVec3 ("cameraPos",     camera.position);
 
         glEnable(GL_DEPTH_TEST);
         RenderModels(shader);
+
+        // ── Collider wireframe overlay (Renderer tab toggle) ──────────────────
+        DebugUI_DrawColliderOverlay(view, projection);
 
         // ── Jolt wireframe debug draw (F3) ────────────────────────────────────
         if (debugmode)
@@ -233,7 +232,6 @@ int main(void)
             glBindVertexArray(0);
             glUseProgram(shader.ID);
 
-            // Restore fill mode (ImGui needs it)
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
             glEnable(GL_DEPTH_TEST);
         }
@@ -249,10 +247,8 @@ int main(void)
 
     // ── Cleanup ───────────────────────────────────────────────────────────────
     DebugUI_Shutdown();
-
     delete g_DebugRenderer;
     g_DebugRenderer = nullptr;
-
     glfwTerminate();
     return 0;
 }
