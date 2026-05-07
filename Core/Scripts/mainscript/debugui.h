@@ -37,8 +37,12 @@ const float* DebugUI_GetLightDir();
 float DebugUI_GetBrightness();
 float DebugUI_GetLightStrength();
 float DebugUI_GetTimeScale();
-void DebugUI_SetTimeScale(float scale);
-void DebugUI_LoadAndApplyScene(const char* path);
+void  DebugUI_SetTimeScale(float scale);
+void  DebugUI_LoadAndApplyScene(const char* path);
+
+// ── Collider debug overlay ────────────────────────────────────────────────────
+// Returns true when the collider wireframe overlay should be drawn this frame.
+bool DebugUI_GetShowColliderOverlay();
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Bottom Menu API - Modular interface
